@@ -1,0 +1,352 @@
+"use client";
+
+import { useAuth } from "@/lib/firebase/auth-context";
+import { useRouter, useSearchParams } from "next/navigation";
+import { useEffect, useState, useCallback, Suspense } from "react";
+import Link from "next/link";
+
+type Kitchen = {
+    id: string;
+    name: string;
+    city: string;
+    area: string;
+    status: string;
+    avgRating: number;
+    totalReviews: number;
+    isVerified: boolean;
+    coverImage: string | null;
+};
+
+type Stats = {
+    totalOrders: number;
+    totalMeals: number;
+};
+
+type TopBuyer = {
+    customerId: string;
+    customerName: string | null;
+    customerAvatar: string | null;
+    totalSpent: number;
+    orderCount: number;
+};
+
+type TopFood = {
+    mealId: string;
+    mealName: string;
+    mealImage: string | null;
+    totalQuantity: number;
+    totalRevenue: number;
+};
+
+function DashboardContent() {
+    const { user, loading: authLoading, getIdToken } = useAuth();
+    const router = useRouter();
+    const searchParams = useSearchParams();
+    const justRegistered = searchParams.get("registered") === "true";
+
+    const [kitchen, setKitchen] = useState<Kitchen | null>(null);
+    const [stats, setStats] = useState<Stats>({ totalOrders: 0, totalMeals: 0 });
+    const [orders, setOrders] = useState<{ id: string; totalAmount: number; status: string }[]>([]);
+    const [topBuyers, setTopBuyers] = useState<TopBuyer[]>([]);
+    const [topFood, setTopFood] = useState<TopFood[]>([]);
+    const [analyticsMonth, setAnalyticsMonth] = useState("");
+    const [loading, setLoading] = useState(true);
+
+    const loadDashboard = useCallback(async () => {
+        try {
+            const token = await getIdToken();
+            if (!token) return;
+
+            const kitchenRes = await fetch("/api/kitchens?ownerId=me", {
+                headers: { Authorization: `Bearer ${token}` },
+            });
+
+            let kitchenId: string | null = null;
+
+            if (kitchenRes.ok) {
+                const kitchenData = await kitchenRes.json();
+                const kitchens = kitchenData.data || [];
+                if (kitchens.length > 0) {
+                    setKitchen(kitchens[0]);
+                    kitchenId = kitchens[0].id;
+                    const menuRes = await fetch(`/api/kitchens/${kitchenId}/menu`);
+                    if (menuRes.ok) {
+                        const menuData = await menuRes.json();
+                        setStats((prev) => ({ ...prev, totalMeals: (menuData.data || []).length }));
+                    }
+                }
+            }
+
+            const ordersRes = await fetch("/api/orders", {
+                headers: { Authorization: `Bearer ${token}` },
+            });
+            if (ordersRes.ok) {
+                const ordersData = await ordersRes.json();
+                const items = ordersData.data || [];
+                setOrders(items);
+                setStats((prev) => ({ ...prev, totalOrders: items.length }));
+            }
+
+            // Fetch analytics
+            if (kitchenId) {
+                try {
+                    const analyticsRes = await fetch(`/api/kitchens/${kitchenId}/analytics`, {
+                        headers: { Authorization: `Bearer ${token}` },
+                    });
+                    if (analyticsRes.ok) {
+                        const analyticsData = await analyticsRes.json();
+                        setTopBuyers(analyticsData.data?.topBuyers || []);
+                        setTopFood(analyticsData.data?.topFood || []);
+                        setAnalyticsMonth(analyticsData.data?.month || "");
+                    }
+                } catch {
+                    /* analytics non-critical */
+                }
+            }
+        } catch (err) {
+            console.error("Dashboard load error:", err);
+        } finally {
+            setLoading(false);
+        }
+    }, [getIdToken]);
+
+    useEffect(() => {
+        if (!authLoading && !user) {
+            router.push("/login?redirect=/dashboard");
+            return;
+        }
+        if (user) loadDashboard();
+    }, [user, authLoading, router, loadDashboard]);
+
+    if (authLoading || loading) {
+        return (
+            <div className="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
+                <div className="animate-pulse-soft space-y-6">
+                    <div className="h-8 w-48 rounded-lg animate-shimmer" />
+                    <div className="grid grid-cols-1 gap-6 sm:grid-cols-3">
+                        {[1, 2, 3].map((i) => <div key={i} className="h-28 rounded-2xl animate-shimmer" />)}
+                    </div>
+                </div>
+            </div>
+        );
+    }
+
+    return (
+        <div className="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
+            {/* Success Banner */}
+            {justRegistered && (
+                <div className="mb-6 rounded-xl bg-accent-50 border border-accent-200 px-4 py-3 text-sm text-accent-800 animate-slide-up dark:bg-accent-900/30 dark:border-accent-800 dark:text-accent-300">
+                    🎉 Kitchen registered successfully! Start adding meals to your menu.
+                </div>
+            )}
+
+            {/* Header */}
+            <div className="flex items-center justify-between mb-8">
+                <div>
+                    <h1 className="text-2xl sm:text-3xl font-bold text-neutral-900 dark:text-neutral-50">
+                        Cook Dashboard
+                    </h1>
+                    <p className="mt-1 text-neutral-500 dark:text-neutral-400">
+                        Welcome back, {user?.name?.split(" ")[0]}
+                    </p>
+                </div>
+                {kitchen && (
+                    <Link
+                        href={`/kitchen/${kitchen.id}`}
+                        className="hidden sm:inline-flex rounded-xl border border-neutral-200 bg-white px-4 py-2 text-sm font-medium text-neutral-700 hover:bg-neutral-50 transition-all dark:bg-neutral-800 dark:border-neutral-700 dark:text-neutral-300"
+                    >
+                        View Public Profile →
+                    </Link>
+                )}
+            </div>
+
+            {/* No Kitchen */}
+            {!kitchen && (
+                <div className="text-center py-16 rounded-2xl border-2 border-dashed border-neutral-300 dark:border-neutral-600">
+                    <span className="text-5xl block mb-4">👨‍🍳</span>
+                    <h2 className="text-lg font-semibold text-neutral-700 dark:text-neutral-300">No kitchen registered yet</h2>
+                    <p className="mt-2 text-sm text-neutral-500 dark:text-neutral-400">Register your kitchen to start selling</p>
+                    <Link
+                        href="/become-a-cook"
+                        className="mt-4 inline-block rounded-xl bg-primary-500 px-6 py-2.5 text-sm font-semibold text-white hover:bg-primary-600 transition-all"
+                    >
+                        Register Kitchen
+                    </Link>
+                </div>
+            )}
+
+            {kitchen && (
+                <>
+                    {/* Stats */}
+                    <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4 mb-8">
+                        <StatCard icon="⭐" label="Rating" value={Number(kitchen.avgRating) > 0 ? Number(kitchen.avgRating).toFixed(1) : "New"} />
+                        <StatCard icon="💬" label="Reviews" value={String(kitchen.totalReviews || 0)} />
+                        <StatCard icon="🍽️" label="Menu Items" value={String(stats.totalMeals)} />
+                        <StatCard icon="📦" label="Orders" value={String(stats.totalOrders)} />
+                    </div>
+
+                    {/* Quick Actions */}
+                    <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5 mb-8">
+                        <Link href="/dashboard/menu" className="rounded-2xl border border-neutral-200/60 bg-white p-4 shadow-sm hover:shadow-md transition-all group text-center dark:bg-neutral-800 dark:border-neutral-700">
+                            <span className="text-2xl block">🍱</span>
+                            <h3 className="mt-1 text-sm font-semibold text-neutral-900 group-hover:text-primary-600 dark:text-neutral-100">Menu</h3>
+                        </Link>
+                        <Link href="/dashboard/orders" className="rounded-2xl border border-neutral-200/60 bg-white p-4 shadow-sm hover:shadow-md transition-all group text-center dark:bg-neutral-800 dark:border-neutral-700">
+                            <span className="text-2xl block">📦</span>
+                            <h3 className="mt-1 text-sm font-semibold text-neutral-900 group-hover:text-primary-600 dark:text-neutral-100">Orders</h3>
+                        </Link>
+                        <Link href="/dashboard/reviews" className="rounded-2xl border border-neutral-200/60 bg-white p-4 shadow-sm hover:shadow-md transition-all group text-center dark:bg-neutral-800 dark:border-neutral-700">
+                            <span className="text-2xl block">⭐</span>
+                            <h3 className="mt-1 text-sm font-semibold text-neutral-900 group-hover:text-primary-600 dark:text-neutral-100">Reviews</h3>
+                        </Link>
+                        <Link href="/dashboard/settings" className="rounded-2xl border border-neutral-200/60 bg-white p-4 shadow-sm hover:shadow-md transition-all group text-center dark:bg-neutral-800 dark:border-neutral-700">
+                            <span className="text-2xl block">⚙️</span>
+                            <h3 className="mt-1 text-sm font-semibold text-neutral-900 group-hover:text-primary-600 dark:text-neutral-100">Settings</h3>
+                        </Link>
+                        <Link href="/dashboard/subscription" className="rounded-2xl border border-accent-200/60 bg-gradient-to-br from-accent-50 to-white p-4 shadow-sm hover:shadow-md transition-all group text-center dark:from-accent-900/20 dark:to-neutral-800 dark:border-accent-800">
+                            <span className="text-2xl block">💎</span>
+                            <h3 className="mt-1 text-sm font-semibold text-accent-700 dark:text-accent-300">Premium</h3>
+                        </Link>
+                    </div>
+
+                    {/* ── Analytics Section ── */}
+                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
+                        {/* Top 2 Buyers This Month */}
+                        <div className="rounded-2xl border border-neutral-200/60 bg-white p-6 shadow-sm dark:bg-neutral-800 dark:border-neutral-700">
+                            <div className="flex items-center justify-between mb-4">
+                                <h2 className="font-bold text-neutral-900 dark:text-neutral-50">🏆 Top Buyers</h2>
+                                <span className="text-xs text-neutral-400 dark:text-neutral-500">{analyticsMonth}</span>
+                            </div>
+                            {topBuyers.length > 0 ? (
+                                <div className="space-y-3">
+                                    {topBuyers.map((buyer, i) => (
+                                        <div key={buyer.customerId} className="flex items-center gap-3 rounded-xl bg-neutral-50 p-3 dark:bg-neutral-700/50">
+                                            <span className={`flex h-8 w-8 items-center justify-center rounded-full text-sm font-bold ${i === 0 ? "bg-amber-100 text-amber-700" : "bg-neutral-200 text-neutral-600 dark:bg-neutral-600 dark:text-neutral-300"}`}>
+                                                {i + 1}
+                                            </span>
+                                            {buyer.customerAvatar ? (
+                                                <img src={buyer.customerAvatar} alt="" className="h-9 w-9 rounded-full object-cover" />
+                                            ) : (
+                                                <div className="h-9 w-9 rounded-full bg-primary-100 flex items-center justify-center text-sm font-bold text-primary-700 dark:bg-primary-900/30 dark:text-primary-300">
+                                                    {buyer.customerName?.[0]?.toUpperCase() || "?"}
+                                                </div>
+                                            )}
+                                            <div className="flex-1 min-w-0">
+                                                <p className="font-medium text-sm text-neutral-900 truncate dark:text-neutral-100">
+                                                    {buyer.customerName || "Anonymous"}
+                                                </p>
+                                                <p className="text-xs text-neutral-500 dark:text-neutral-400">
+                                                    {buyer.orderCount} order{buyer.orderCount !== 1 ? "s" : ""}
+                                                </p>
+                                            </div>
+                                            <p className="font-bold text-sm text-accent-600 dark:text-accent-400">
+                                                Rs. {Number(buyer.totalSpent).toLocaleString()}
+                                            </p>
+                                        </div>
+                                    ))}
+                                </div>
+                            ) : (
+                                <p className="text-sm text-neutral-500 text-center py-6 dark:text-neutral-400">No orders this month yet</p>
+                            )}
+                        </div>
+
+                        {/* Top Selling Food This Month */}
+                        <div className="rounded-2xl border border-neutral-200/60 bg-white p-6 shadow-sm dark:bg-neutral-800 dark:border-neutral-700">
+                            <div className="flex items-center justify-between mb-4">
+                                <h2 className="font-bold text-neutral-900 dark:text-neutral-50">🔥 Top Selling Food</h2>
+                                <span className="text-xs text-neutral-400 dark:text-neutral-500">{analyticsMonth}</span>
+                            </div>
+                            {topFood.length > 0 ? (
+                                <div className="space-y-3">
+                                    {topFood.slice(0, 5).map((food, i) => (
+                                        <div key={food.mealId} className="flex items-center gap-3 rounded-xl bg-neutral-50 p-3 dark:bg-neutral-700/50">
+                                            <span className={`flex h-8 w-8 items-center justify-center rounded-full text-sm font-bold ${i === 0 ? "bg-red-100 text-red-600" : i === 1 ? "bg-orange-100 text-orange-600" : "bg-neutral-200 text-neutral-600 dark:bg-neutral-600 dark:text-neutral-300"}`}>
+                                                {i + 1}
+                                            </span>
+                                            {food.mealImage ? (
+                                                <img src={food.mealImage} alt="" className="h-9 w-9 rounded-lg object-cover" />
+                                            ) : (
+                                                <div className="h-9 w-9 rounded-lg bg-orange-100 flex items-center justify-center text-sm dark:bg-orange-900/30">🍱</div>
+                                            )}
+                                            <div className="flex-1 min-w-0">
+                                                <p className="font-medium text-sm text-neutral-900 truncate dark:text-neutral-100">{food.mealName}</p>
+                                                <p className="text-xs text-neutral-500 dark:text-neutral-400">
+                                                    {food.totalQuantity} sold · Rs. {Number(food.totalRevenue).toLocaleString()}
+                                                </p>
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
+                            ) : (
+                                <p className="text-sm text-neutral-500 text-center py-6 dark:text-neutral-400">No sales this month yet</p>
+                            )}
+                        </div>
+                    </div>
+
+                    {/* Recent Orders */}
+                    <section>
+                        <h2 className="text-lg font-bold text-neutral-900 mb-4 dark:text-neutral-50">Recent Orders</h2>
+                        {orders.length > 0 ? (
+                            <div className="space-y-3">
+                                {orders.slice(0, 5).map((order) => (
+                                    <div
+                                        key={order.id}
+                                        className="rounded-xl border border-neutral-200/60 bg-white p-4 flex items-center justify-between dark:bg-neutral-800 dark:border-neutral-700"
+                                    >
+                                        <div>
+                                            <p className="font-medium text-neutral-900 dark:text-neutral-100">
+                                                Order #{order.id.slice(0, 8)}
+                                            </p>
+                                            <p className="text-sm text-neutral-500 dark:text-neutral-400">
+                                                Rs. {Number(order.totalAmount).toLocaleString()} · {order.status}
+                                            </p>
+                                        </div>
+                                        <span className={`rounded-full px-3 py-1 text-xs font-semibold ${order.status === "DELIVERED" ? "bg-accent-50 text-accent-700 dark:bg-accent-900/30 dark:text-accent-300" :
+                                            order.status === "PENDING" ? "bg-amber-50 text-amber-700 dark:bg-amber-900/30 dark:text-amber-300" :
+                                                "bg-neutral-100 text-neutral-600 dark:bg-neutral-700 dark:text-neutral-300"
+                                            }`}>
+                                            {order.status}
+                                        </span>
+                                    </div>
+                                ))}
+                            </div>
+                        ) : (
+                            <p className="text-neutral-500 text-sm dark:text-neutral-400">No orders yet.</p>
+                        )}
+                    </section>
+                </>
+            )}
+        </div>
+    );
+}
+
+function StatCard({ icon, label, value }: { icon: string; label: string; value: string }) {
+    return (
+        <div className="rounded-2xl border border-neutral-200/60 bg-white p-5 shadow-sm dark:bg-neutral-800 dark:border-neutral-700">
+            <div className="flex items-center gap-3">
+                <span className="text-2xl">{icon}</span>
+                <div>
+                    <p className="text-2xl font-bold text-neutral-900 dark:text-neutral-50">{value}</p>
+                    <p className="text-xs text-neutral-500 dark:text-neutral-400">{label}</p>
+                </div>
+            </div>
+        </div>
+    );
+}
+
+export default function DashboardPage() {
+    return (
+        <Suspense fallback={
+            <div className="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
+                <div className="animate-pulse-soft space-y-6">
+                    <div className="h-8 w-48 rounded-lg animate-shimmer" />
+                    <div className="grid grid-cols-1 gap-6 sm:grid-cols-3">
+                        {[1, 2, 3].map((i) => <div key={i} className="h-28 rounded-2xl animate-shimmer" />)}
+                    </div>
+                </div>
+            </div>
+        }>
+            <DashboardContent />
+        </Suspense>
+    );
+}

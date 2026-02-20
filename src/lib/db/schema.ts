@@ -1,0 +1,634 @@
+import {
+    pgTable,
+    uuid,
+    varchar,
+    text,
+    integer,
+    boolean,
+    timestamp,
+    decimal,
+    pgEnum,
+    index,
+    uniqueIndex,
+} from "drizzle-orm/pg-core";
+import { relations } from "drizzle-orm";
+
+// ─── Enums ──────────────────────────────────────────────────────────────────
+
+export const userRoleEnum = pgEnum("user_role", [
+    "CUSTOMER",
+    "COOK",
+    "ADMIN",
+]);
+
+export const kitchenStatusEnum = pgEnum("kitchen_status", [
+    "ACTIVE",
+    "SUSPENDED",
+    "INACTIVE",
+]);
+
+export const orderStatusEnum = pgEnum("order_status", [
+    "PENDING",
+    "ACCEPTED",
+    "COMPLETED",
+    "CANCELLED",
+]);
+
+export const subscriptionStatusEnum = pgEnum("subscription_status", [
+    "TRIALING",
+    "ACTIVE",
+    "CANCELLED",
+    "EXPIRED",
+    "PAST_DUE",
+    "SUSPENDED",
+]);
+
+export const paymentMethodEnum = pgEnum("payment_method", [
+    "STRIPE",
+    "JAZZCASH",
+    "EASYPAISA",
+    "BANK_TRANSFER",
+    "SADAPAY",
+    "FREE_TRIAL",
+]);
+
+export const subscriptionPlanTypeEnum = pgEnum("subscription_plan_type", [
+    "BASE_MONTHLY",
+    "BASE_2MONTH",
+    "BASE_4MONTH",
+]);
+
+export const menuAvailabilityEnum = pgEnum("menu_availability", [
+    "AVAILABLE",
+    "OUT_OF_STOCK",
+    "NOT_TODAY",
+    "PREPARING",
+]);
+
+export const deliveryModeEnum = pgEnum("delivery_mode", [
+    "SELF_PICKUP",
+    "FREE_DELIVERY",
+]);
+
+export const boostStatusEnum = pgEnum("boost_status", [
+    "ACTIVE",
+    "EXPIRED",
+    "CANCELLED",
+]);
+
+export const reportStatusEnum = pgEnum("report_status", [
+    "PENDING",
+    "REVIEWED",
+    "RESOLVED",
+    "DISMISSED",
+]);
+
+export const reportTargetEnum = pgEnum("report_target", [
+    "KITCHEN",
+    "REVIEW",
+    "USER",
+]);
+
+// ─── Users ──────────────────────────────────────────────────────────────────
+
+export const users = pgTable(
+    "users",
+    {
+        id: uuid("id").defaultRandom().primaryKey(),
+        firebaseUid: varchar("firebase_uid", { length: 128 }).notNull().unique(),
+        email: varchar("email", { length: 255 }),
+        name: varchar("name", { length: 255 }),
+        phone: varchar("phone", { length: 20 }),
+        avatarUrl: text("avatar_url"),
+        role: userRoleEnum("role").default("CUSTOMER").notNull(),
+        isPhoneVerified: boolean("is_phone_verified").default(false).notNull(),
+        isEmailVerified: boolean("is_email_verified").default(false).notNull(),
+        isActive: boolean("is_active").default(true).notNull(),
+        lastLoginAt: timestamp("last_login_at", { withTimezone: true }),
+        createdAt: timestamp("created_at", { withTimezone: true })
+            .defaultNow()
+            .notNull(),
+        updatedAt: timestamp("updated_at", { withTimezone: true })
+            .defaultNow()
+            .notNull(),
+        deletedAt: timestamp("deleted_at", { withTimezone: true }),
+    },
+    (table) => [
+        uniqueIndex("users_firebase_uid_idx").on(table.firebaseUid),
+        index("users_email_idx").on(table.email),
+        index("users_role_idx").on(table.role),
+        index("users_active_idx").on(table.isActive),
+    ]
+);
+
+// ─── Kitchens ───────────────────────────────────────────────────────────────
+
+export const kitchens = pgTable(
+    "kitchens",
+    {
+        id: uuid("id").defaultRandom().primaryKey(),
+        ownerId: uuid("owner_id")
+            .notNull()
+            .references(() => users.id, { onDelete: "cascade" }),
+        name: varchar("name", { length: 255 }).notNull(),
+        slug: varchar("slug", { length: 255 }).notNull().unique(),
+        description: text("description"),
+        profileImageUrl: text("profile_image_url"),
+        coverImageUrl: text("cover_image_url"),
+        images: text("images").array(),
+
+        // Address
+        addressLine: varchar("address_line", { length: 500 }),
+        city: varchar("city", { length: 100 }).notNull(),
+        citySlug: varchar("city_slug", { length: 100 }).notNull(),
+        area: varchar("area", { length: 200 }),
+        areaSlug: varchar("area_slug", { length: 200 }),
+        state: varchar("state", { length: 100 }),
+        country: varchar("country", { length: 100 }).default("Pakistan").notNull(),
+        postalCode: varchar("postal_code", { length: 20 }),
+        latitude: decimal("latitude", { precision: 10, scale: 7 }),
+        longitude: decimal("longitude", { precision: 10, scale: 7 }),
+
+        // Contact
+        contactPhone: varchar("contact_phone", { length: 20 }),
+        contactWhatsapp: varchar("contact_whatsapp", { length: 20 }),
+        contactEmail: varchar("contact_email", { length: 255 }),
+
+        // Delivery options the seller supports
+        deliveryOptions: text("delivery_options").array(), // ["SELF_PICKUP", "FREE_DELIVERY"]
+
+        // Cuisine & food
+        cuisineTypes: text("cuisine_types").array(),
+        dietaryTags: text("dietary_tags").array(), // veg, non-veg, vegan, etc.
+
+        // Status & verification
+        status: kitchenStatusEnum("status").default("ACTIVE").notNull(),
+        isOpen: boolean("is_open").default(true).notNull(),
+        isVerified: boolean("is_verified").default(false).notNull(),
+        isWhatsappVerified: boolean("is_whatsapp_verified")
+            .default(false)
+            .notNull(),
+
+        // Trial & subscription tracking
+        trialEndsAt: timestamp("trial_ends_at", { withTimezone: true }),
+        isTrialUsed: boolean("is_trial_used").default(false).notNull(),
+
+        // Aggregated ratings (denormalized for performance)
+        avgRating: decimal("avg_rating", { precision: 3, scale: 2 }).default("0"),
+        reviewCount: integer("review_count").default(0).notNull(),
+
+        // Boost & premium
+        boostPriority: integer("boost_priority").default(0).notNull(),
+        boostExpiresAt: timestamp("boost_expires_at", { withTimezone: true }),
+
+        // Timestamps
+        createdAt: timestamp("created_at", { withTimezone: true })
+            .defaultNow()
+            .notNull(),
+        updatedAt: timestamp("updated_at", { withTimezone: true })
+            .defaultNow()
+            .notNull(),
+        deletedAt: timestamp("deleted_at", { withTimezone: true }),
+    },
+    (table) => [
+        // Primary search index: city + active + boost (most common query)
+        index("kitchens_city_active_boost_idx").on(
+            table.citySlug,
+            table.status,
+            table.boostPriority
+        ),
+        index("kitchens_owner_idx").on(table.ownerId),
+        index("kitchens_area_idx").on(table.areaSlug),
+        index("kitchens_rating_idx").on(table.avgRating),
+        index("kitchens_status_idx").on(table.status),
+        uniqueIndex("kitchens_slug_idx").on(table.slug),
+    ]
+);
+
+// ─── Meals (Menu Items) ────────────────────────────────────────────────────
+
+export const meals = pgTable(
+    "meals",
+    {
+        id: uuid("id").defaultRandom().primaryKey(),
+        kitchenId: uuid("kitchen_id")
+            .notNull()
+            .references(() => kitchens.id, { onDelete: "cascade" }),
+        name: varchar("name", { length: 255 }).notNull(),
+        description: text("description"),
+        price: integer("price").notNull(), // price in smallest unit (paise/cents)
+        currency: varchar("currency", { length: 3 }).default("PKR").notNull(),
+        imageUrl: text("image_url"),
+        images: text("images").array(),
+
+        // Categorization
+        category: varchar("category", { length: 100 }), // breakfast, lunch, dinner, snack
+        cuisineType: varchar("cuisine_type", { length: 100 }),
+        dietaryTags: text("dietary_tags").array(), // veg, non-veg, vegan, gluten-free
+
+        // Availability
+        isAvailable: boolean("is_available").default(true).notNull(),
+        availabilityStatus: menuAvailabilityEnum("availability_status").default("AVAILABLE").notNull(),
+        availableDays: text("available_days").array(), // ['monday','tuesday',...]
+        servingTime: varchar("serving_time", { length: 50 }), // "12:00-14:00"
+
+        // Nutrition (optional)
+        calories: integer("calories"),
+        servingSize: varchar("serving_size", { length: 100 }),
+
+        // Sort
+        sortOrder: integer("sort_order").default(0).notNull(),
+
+        // Timestamps
+        createdAt: timestamp("created_at", { withTimezone: true })
+            .defaultNow()
+            .notNull(),
+        updatedAt: timestamp("updated_at", { withTimezone: true })
+            .defaultNow()
+            .notNull(),
+        deletedAt: timestamp("deleted_at", { withTimezone: true }),
+    },
+    (table) => [
+        index("meals_kitchen_idx").on(table.kitchenId),
+        index("meals_available_idx").on(table.kitchenId, table.isAvailable),
+        index("meals_category_idx").on(table.category),
+        index("meals_price_idx").on(table.price),
+    ]
+);
+
+// ─── Reviews ────────────────────────────────────────────────────────────────
+
+export const reviews = pgTable(
+    "reviews",
+    {
+        id: uuid("id").defaultRandom().primaryKey(),
+        kitchenId: uuid("kitchen_id")
+            .notNull()
+            .references(() => kitchens.id, { onDelete: "cascade" }),
+        userId: uuid("user_id")
+            .notNull()
+            .references(() => users.id, { onDelete: "cascade" }),
+        menuItemId: uuid("menu_item_id").references(() => meals.id, {
+            onDelete: "set null",
+        }),
+        rating: integer("rating").notNull(), // 1-5
+        comment: text("comment"),
+        isPinned: boolean("is_pinned").default(false).notNull(),
+        sellerReply: text("seller_reply"),
+        sellerRepliedAt: timestamp("seller_replied_at", { withTimezone: true }),
+        isVerifiedPurchase: boolean("is_verified_purchase")
+            .default(false)
+            .notNull(),
+        isVisible: boolean("is_visible").default(true).notNull(),
+        isFlagged: boolean("is_flagged").default(false).notNull(),
+        flagReason: text("flag_reason"),
+
+        // Timestamps
+        createdAt: timestamp("created_at", { withTimezone: true })
+            .defaultNow()
+            .notNull(),
+        updatedAt: timestamp("updated_at", { withTimezone: true })
+            .defaultNow()
+            .notNull(),
+        deletedAt: timestamp("deleted_at", { withTimezone: true }),
+    },
+    (table) => [
+        // One review per user per kitchen
+        uniqueIndex("reviews_user_kitchen_idx").on(table.userId, table.kitchenId),
+        index("reviews_kitchen_idx").on(table.kitchenId),
+        index("reviews_user_idx").on(table.userId),
+        index("reviews_visible_idx").on(table.kitchenId, table.isVisible),
+        index("reviews_rating_idx").on(table.rating),
+    ]
+);
+
+// ─── Orders ─────────────────────────────────────────────────────────────────
+
+export const orders = pgTable(
+    "orders",
+    {
+        id: uuid("id").defaultRandom().primaryKey(),
+        kitchenId: uuid("kitchen_id")
+            .notNull()
+            .references(() => kitchens.id, { onDelete: "cascade" }),
+        customerId: uuid("customer_id")
+            .notNull()
+            .references(() => users.id, { onDelete: "cascade" }),
+        status: orderStatusEnum("status").default("PENDING").notNull(),
+        notes: text("notes"),
+        totalAmount: integer("total_amount"), // estimated total in smallest unit
+        currency: varchar("currency", { length: 3 }).default("PKR").notNull(),
+
+        // Delivery
+        deliveryMode: deliveryModeEnum("delivery_mode").default("SELF_PICKUP").notNull(),
+        estimatedMinutes: integer("estimated_minutes"),
+
+        // Customer location (for map)
+        customerLat: decimal("customer_lat", { precision: 10, scale: 7 }),
+        customerLng: decimal("customer_lng", { precision: 10, scale: 7 }),
+        customerAddress: text("customer_address"),
+
+        // Timestamps
+        createdAt: timestamp("created_at", { withTimezone: true })
+            .defaultNow()
+            .notNull(),
+        updatedAt: timestamp("updated_at", { withTimezone: true })
+            .defaultNow()
+            .notNull(),
+        acceptedAt: timestamp("accepted_at", { withTimezone: true }),
+        completedAt: timestamp("completed_at", { withTimezone: true }),
+        cancelledAt: timestamp("cancelled_at", { withTimezone: true }),
+        deletedAt: timestamp("deleted_at", { withTimezone: true }),
+    },
+    (table) => [
+        index("orders_kitchen_idx").on(table.kitchenId),
+        index("orders_customer_idx").on(table.customerId),
+        index("orders_status_idx").on(table.status),
+        index("orders_created_idx").on(table.createdAt),
+    ]
+);
+
+// ─── Order Items ────────────────────────────────────────────────────────────
+
+export const orderItems = pgTable(
+    "order_items",
+    {
+        id: uuid("id").defaultRandom().primaryKey(),
+        orderId: uuid("order_id")
+            .notNull()
+            .references(() => orders.id, { onDelete: "cascade" }),
+        mealId: uuid("meal_id")
+            .notNull()
+            .references(() => meals.id, { onDelete: "cascade" }),
+        quantity: integer("quantity").notNull().default(1),
+        priceAtOrder: integer("price_at_order").notNull(), // snapshot of meal price
+        notes: text("notes"),
+    },
+    (table) => [
+        index("order_items_order_idx").on(table.orderId),
+        index("order_items_meal_idx").on(table.mealId),
+    ]
+);
+
+// ─── Subscriptions (Cook Premium Plans) ─────────────────────────────────────
+
+export const subscriptions = pgTable(
+    "subscriptions",
+    {
+        id: uuid("id").defaultRandom().primaryKey(),
+        userId: uuid("user_id")
+            .notNull()
+            .references(() => users.id, { onDelete: "cascade" }),
+        kitchenId: uuid("kitchen_id")
+            .notNull()
+            .references(() => kitchens.id, { onDelete: "cascade" }),
+        planId: uuid("plan_id")
+            .notNull()
+            .references(() => premiumPlans.id),
+        planType: subscriptionPlanTypeEnum("plan_type"),
+        stripeSubscriptionId: varchar("stripe_subscription_id", { length: 255 }),
+        stripeCustomerId: varchar("stripe_customer_id", { length: 255 }),
+        paymentMethod: paymentMethodEnum("payment_method")
+            .default("STRIPE")
+            .notNull(),
+        status: subscriptionStatusEnum("status").default("ACTIVE").notNull(),
+        currentPeriodStart: timestamp("current_period_start", {
+            withTimezone: true,
+        }),
+        currentPeriodEnd: timestamp("current_period_end", { withTimezone: true }),
+        gracePeriodEndsAt: timestamp("grace_period_ends_at", {
+            withTimezone: true,
+        }),
+        autoRenew: boolean("auto_renew").default(true).notNull(),
+
+        createdAt: timestamp("created_at", { withTimezone: true })
+            .defaultNow()
+            .notNull(),
+        updatedAt: timestamp("updated_at", { withTimezone: true })
+            .defaultNow()
+            .notNull(),
+        cancelledAt: timestamp("cancelled_at", { withTimezone: true }),
+        cancelReason: text("cancel_reason"),
+    },
+    (table) => [
+        index("subscriptions_user_idx").on(table.userId),
+        index("subscriptions_kitchen_idx").on(table.kitchenId),
+        index("subscriptions_status_idx").on(table.status),
+        index("subscriptions_stripe_idx").on(table.stripeSubscriptionId),
+        index("subscriptions_period_end_idx").on(table.currentPeriodEnd),
+    ]
+);
+
+// ─── Premium Plans ──────────────────────────────────────────────────────────
+
+export const premiumPlans = pgTable("premium_plans", {
+    id: uuid("id").defaultRandom().primaryKey(),
+    name: varchar("name", { length: 255 }).notNull(),
+    description: text("description"),
+    priceMonthly: integer("price_monthly").notNull(), // in smallest unit
+    priceQuarterly: integer("price_quarterly"),
+    priceYearly: integer("price_yearly"),
+    currency: varchar("currency", { length: 3 }).default("PKR").notNull(),
+    region: varchar("region", { length: 100 }).default("PK").notNull(),
+    features: text("features").array(),
+    includesVerifiedBadge: boolean("includes_verified_badge")
+        .default(false)
+        .notNull(),
+    includesBoost: boolean("includes_boost").default(false).notNull(),
+    boostDurationDays: integer("boost_duration_days"),
+    isActive: boolean("is_active").default(true).notNull(),
+    stripePriceIdMonthly: varchar("stripe_price_id_monthly", { length: 255 }),
+    stripePriceIdQuarterly: varchar("stripe_price_id_quarterly", { length: 255 }),
+    stripePriceIdYearly: varchar("stripe_price_id_yearly", { length: 255 }),
+    createdAt: timestamp("created_at", { withTimezone: true })
+        .defaultNow()
+        .notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+        .defaultNow()
+        .notNull(),
+});
+
+// ─── Boosts ─────────────────────────────────────────────────────────────────
+
+export const boosts = pgTable(
+    "boosts",
+    {
+        id: uuid("id").defaultRandom().primaryKey(),
+        kitchenId: uuid("kitchen_id")
+            .notNull()
+            .references(() => kitchens.id, { onDelete: "cascade" }),
+        userId: uuid("user_id")
+            .notNull()
+            .references(() => users.id, { onDelete: "cascade" }),
+        status: boostStatusEnum("status").default("ACTIVE").notNull(),
+        priority: integer("priority").default(1).notNull(),
+        stripePaymentId: varchar("stripe_payment_id", { length: 255 }),
+        startsAt: timestamp("starts_at", { withTimezone: true })
+            .defaultNow()
+            .notNull(),
+        expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+        createdAt: timestamp("created_at", { withTimezone: true })
+            .defaultNow()
+            .notNull(),
+    },
+    (table) => [
+        index("boosts_kitchen_idx").on(table.kitchenId),
+        index("boosts_status_idx").on(table.status),
+        index("boosts_expires_idx").on(table.expiresAt),
+    ]
+);
+
+// ─── Reports (Abuse) ────────────────────────────────────────────────────────
+
+export const reports = pgTable(
+    "reports",
+    {
+        id: uuid("id").defaultRandom().primaryKey(),
+        reporterId: uuid("reporter_id")
+            .notNull()
+            .references(() => users.id, { onDelete: "cascade" }),
+        targetType: reportTargetEnum("target_type").notNull(),
+        targetId: uuid("target_id").notNull(),
+        reason: text("reason").notNull(),
+        details: text("details"),
+        status: reportStatusEnum("status").default("PENDING").notNull(),
+        reviewedBy: uuid("reviewed_by").references(() => users.id),
+        reviewedAt: timestamp("reviewed_at", { withTimezone: true }),
+        resolution: text("resolution"),
+        createdAt: timestamp("created_at", { withTimezone: true })
+            .defaultNow()
+            .notNull(),
+    },
+    (table) => [
+        index("reports_target_idx").on(table.targetType, table.targetId),
+        index("reports_status_idx").on(table.status),
+        index("reports_reporter_idx").on(table.reporterId),
+    ]
+);
+
+// ─── Admin Audit Log ────────────────────────────────────────────────────────
+
+export const adminAuditLog = pgTable(
+    "admin_audit_log",
+    {
+        id: uuid("id").defaultRandom().primaryKey(),
+        adminId: uuid("admin_id")
+            .notNull()
+            .references(() => users.id),
+        action: varchar("action", { length: 255 }).notNull(),
+        targetType: varchar("target_type", { length: 50 }).notNull(),
+        targetId: uuid("target_id").notNull(),
+        details: text("details"),
+        ipAddress: varchar("ip_address", { length: 45 }),
+        createdAt: timestamp("created_at", { withTimezone: true })
+            .defaultNow()
+            .notNull(),
+    },
+    (table) => [
+        index("audit_admin_idx").on(table.adminId),
+        index("audit_action_idx").on(table.action),
+        index("audit_created_idx").on(table.createdAt),
+    ]
+);
+
+// ─── Relations ──────────────────────────────────────────────────────────────
+
+export const usersRelations = relations(users, ({ many }) => ({
+    kitchens: many(kitchens),
+    reviews: many(reviews),
+    orders: many(orders),
+    subscriptions: many(subscriptions),
+    boosts: many(boosts),
+    reports: many(reports),
+}));
+
+export const kitchensRelations = relations(kitchens, ({ one, many }) => ({
+    owner: one(users, {
+        fields: [kitchens.ownerId],
+        references: [users.id],
+    }),
+    meals: many(meals),
+    reviews: many(reviews),
+    orders: many(orders),
+    subscriptions: many(subscriptions),
+    boosts: many(boosts),
+}));
+
+export const mealsRelations = relations(meals, ({ one, many }) => ({
+    kitchen: one(kitchens, {
+        fields: [meals.kitchenId],
+        references: [kitchens.id],
+    }),
+    orderItems: many(orderItems),
+}));
+
+export const reviewsRelations = relations(reviews, ({ one }) => ({
+    kitchen: one(kitchens, {
+        fields: [reviews.kitchenId],
+        references: [kitchens.id],
+    }),
+    user: one(users, {
+        fields: [reviews.userId],
+        references: [users.id],
+    }),
+}));
+
+export const ordersRelations = relations(orders, ({ one, many }) => ({
+    kitchen: one(kitchens, {
+        fields: [orders.kitchenId],
+        references: [kitchens.id],
+    }),
+    customer: one(users, {
+        fields: [orders.customerId],
+        references: [users.id],
+    }),
+    items: many(orderItems),
+}));
+
+export const orderItemsRelations = relations(orderItems, ({ one }) => ({
+    order: one(orders, {
+        fields: [orderItems.orderId],
+        references: [orders.id],
+    }),
+    meal: one(meals, {
+        fields: [orderItems.mealId],
+        references: [meals.id],
+    }),
+}));
+
+export const subscriptionsRelations = relations(subscriptions, ({ one }) => ({
+    user: one(users, {
+        fields: [subscriptions.userId],
+        references: [users.id],
+    }),
+    kitchen: one(kitchens, {
+        fields: [subscriptions.kitchenId],
+        references: [kitchens.id],
+    }),
+    plan: one(premiumPlans, {
+        fields: [subscriptions.planId],
+        references: [premiumPlans.id],
+    }),
+}));
+
+export const boostsRelations = relations(boosts, ({ one }) => ({
+    kitchen: one(kitchens, {
+        fields: [boosts.kitchenId],
+        references: [kitchens.id],
+    }),
+    user: one(users, {
+        fields: [boosts.userId],
+        references: [users.id],
+    }),
+}));
+
+export const reportsRelations = relations(reports, ({ one }) => ({
+    reporter: one(users, {
+        fields: [reports.reporterId],
+        references: [users.id],
+    }),
+    reviewer: one(users, {
+        fields: [reports.reviewedBy],
+        references: [users.id],
+    }),
+}));

@@ -1,65 +1,198 @@
-import Image from "next/image";
+import Link from "next/link";
+import SearchBar from "@/components/ui/SearchBar";
 
-export default function Home() {
+const cities = [
+  { name: "Lahore", emoji: "🏙️", count: "120+" },
+  { name: "Karachi", emoji: "🌊", count: "200+" },
+  { name: "Islamabad", emoji: "🏔️", count: "80+" },
+  { name: "Rawalpindi", emoji: "🏢", count: "60+" },
+  { name: "Faisalabad", emoji: "🏭", count: "50+" },
+  { name: "Multan", emoji: "☀️", count: "40+" },
+];
+
+const features = [
+  {
+    icon: "🏠",
+    title: "Home-Cooked Quality",
+    desc: "Authentic meals prepared by local home cooks with love and care.",
+  },
+  {
+    icon: "💰",
+    title: "Affordable Prices",
+    desc: "No middleman fees. Direct prices from cook to customer.",
+  },
+  {
+    icon: "⭐",
+    title: "Verified & Rated",
+    desc: "Real reviews from real customers. Verified badge for trusted cooks.",
+  },
+  {
+    icon: "📱",
+    title: "Direct Contact",
+    desc: "Connect directly with cooks via WhatsApp. No app dependency.",
+  },
+];
+
+const howItWorks = [
+  { step: "1", title: "Browse", desc: "Explore kitchens in your city. No login required." },
+  { step: "2", title: "Choose", desc: "Pick your favorite meals from the menu." },
+  { step: "3", title: "Contact", desc: "Connect directly with the cook via WhatsApp." },
+  { step: "4", title: "Enjoy", desc: "Fresh home-cooked meal delivered to your door." },
+];
+
+export default function HomePage() {
   return (
-    <div className="flex min-h-screen items-center justify-center bg-zinc-50 font-sans dark:bg-black">
-      <main className="flex min-h-screen w-full max-w-3xl flex-col items-center justify-between py-32 px-16 bg-white dark:bg-black sm:items-start">
-        <Image
-          className="dark:invert"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={100}
-          height={20}
-          priority
-        />
-        <div className="flex flex-col items-center gap-6 text-center sm:items-start sm:text-left">
-          <h1 className="max-w-xs text-3xl font-semibold leading-10 tracking-tight text-black dark:text-zinc-50">
-            To get started, edit the page.tsx file.
-          </h1>
-          <p className="max-w-md text-lg leading-8 text-zinc-600 dark:text-zinc-400">
-            Looking for a starting point or more instructions? Head over to{" "}
-            <a
-              href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Templates
-            </a>{" "}
-            or the{" "}
-            <a
-              href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Learning
-            </a>{" "}
-            center.
+    <div className="flex flex-col">
+      {/* ── Hero ─────────────────────────────────────────────────── */}
+      <section className="relative overflow-hidden bg-gradient-to-br from-primary-50 via-white to-accent-50 dark:from-neutral-900 dark:via-neutral-900 dark:to-neutral-800">
+        {/* Background decoration */}
+        <div className="absolute inset-0 overflow-hidden pointer-events-none">
+          <div className="absolute -top-40 -right-40 h-80 w-80 rounded-full bg-primary-200/30 blur-3xl dark:bg-primary-900/20" />
+          <div className="absolute -bottom-40 -left-40 h-80 w-80 rounded-full bg-accent-200/30 blur-3xl dark:bg-accent-900/20" />
+        </div>
+
+        <div className="relative mx-auto max-w-7xl px-4 py-20 sm:px-6 sm:py-28 lg:px-8 lg:py-36">
+          <div className="text-center max-w-3xl mx-auto">
+            <span className="inline-block rounded-full bg-primary-100/80 px-4 py-1.5 text-sm font-medium text-primary-700 mb-6 animate-fade-in dark:bg-primary-900/40 dark:text-primary-300">
+              🍱 Pakistan&apos;s #1 Home Food Platform
+            </span>
+
+            <h1 className="text-4xl font-extrabold tracking-tight text-neutral-900 sm:text-5xl lg:text-6xl animate-slide-up dark:text-neutral-50">
+              Home-Cooked Meals,{" "}
+              <span className="text-gradient">Delivered Fresh</span>
+            </h1>
+
+            <p className="mt-6 text-lg text-neutral-600 leading-relaxed max-w-2xl mx-auto animate-slide-up dark:text-neutral-300" style={{ animationDelay: "0.1s" }}>
+              Discover authentic home kitchens in your city. Browse menus, check ratings,
+              and connect directly with cooks. No middleman, no markups.
+            </p>
+
+            {/* Search Bar */}
+            <div className="mt-10 animate-slide-up" style={{ animationDelay: "0.2s" }}>
+              <SearchBar />
+            </div>
+
+            {/* Quick Stats */}
+            <div className="mt-10 flex flex-wrap justify-center gap-8 text-center animate-fade-in" style={{ animationDelay: "0.3s" }}>
+              <div>
+                <p className="text-2xl font-bold text-primary-600 dark:text-primary-400">500+</p>
+                <p className="text-sm text-neutral-500 dark:text-neutral-400">Home Kitchens</p>
+              </div>
+              <div>
+                <p className="text-2xl font-bold text-primary-600 dark:text-primary-400">6</p>
+                <p className="text-sm text-neutral-500 dark:text-neutral-400">Cities</p>
+              </div>
+              <div>
+                <p className="text-2xl font-bold text-primary-600 dark:text-primary-400">10K+</p>
+                <p className="text-sm text-neutral-500 dark:text-neutral-400">Happy Customers</p>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* ── Browse by City ──────────────────────────────────────── */}
+      <section className="mx-auto max-w-7xl px-4 py-16 sm:px-6 lg:px-8">
+        <div className="text-center mb-10">
+          <h2 className="text-2xl font-bold text-neutral-900 sm:text-3xl dark:text-neutral-50">
+            Browse by City
+          </h2>
+          <p className="mt-2 text-neutral-500 dark:text-neutral-400">
+            Find home kitchens near you
           </p>
         </div>
-        <div className="flex flex-col gap-4 text-base font-medium sm:flex-row">
-          <a
-            className="flex h-12 w-full items-center justify-center gap-2 rounded-full bg-foreground px-5 text-background transition-colors hover:bg-[#383838] dark:hover:bg-[#ccc] md:w-[158px]"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={16}
-              height={16}
-            />
-            Deploy Now
-          </a>
-          <a
-            className="flex h-12 w-full items-center justify-center rounded-full border border-solid border-black/[.08] px-5 transition-colors hover:border-transparent hover:bg-black/[.04] dark:border-white/[.145] dark:hover:bg-[#1a1a1a] md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Documentation
-          </a>
+
+        <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-6">
+          {cities.map((city) => (
+            <Link
+              key={city.name}
+              href={`/city/${city.name.toLowerCase()}`}
+              className="group flex flex-col items-center rounded-2xl bg-white border border-neutral-200/60 p-6 shadow-sm hover:shadow-lg hover:border-primary-300 transition-all duration-300 hover:-translate-y-1 dark:bg-neutral-800 dark:border-neutral-700 dark:hover:border-primary-600"
+            >
+              <span className="text-3xl mb-2 group-hover:scale-110 transition-transform">{city.emoji}</span>
+              <span className="font-semibold text-neutral-900 dark:text-neutral-100">{city.name}</span>
+              <span className="text-xs text-neutral-400 mt-1">{city.count} kitchens</span>
+            </Link>
+          ))}
         </div>
-      </main>
+      </section>
+
+      {/* ── How It Works ────────────────────────────────────────── */}
+      <section className="bg-neutral-50 dark:bg-neutral-900">
+        <div className="mx-auto max-w-7xl px-4 py-16 sm:px-6 lg:px-8">
+          <div className="text-center mb-12">
+            <h2 className="text-2xl font-bold text-neutral-900 sm:text-3xl dark:text-neutral-50">
+              How It Works
+            </h2>
+            <p className="mt-2 text-neutral-500 dark:text-neutral-400">
+              Getting home-cooked food is simple
+            </p>
+          </div>
+
+          <div className="grid grid-cols-1 gap-8 sm:grid-cols-2 lg:grid-cols-4">
+            {howItWorks.map((item, i) => (
+              <div key={i} className="relative text-center">
+                <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-primary-500 text-xl font-bold text-white shadow-lg shadow-primary-500/30">
+                  {item.step}
+                </div>
+                <h3 className="mt-4 text-lg font-semibold text-neutral-900 dark:text-neutral-100">
+                  {item.title}
+                </h3>
+                <p className="mt-2 text-sm text-neutral-500 leading-relaxed dark:text-neutral-400">
+                  {item.desc}
+                </p>
+              </div>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      {/* ── Features ────────────────────────────────────────────── */}
+      <section className="mx-auto max-w-7xl px-4 py-16 sm:px-6 lg:px-8">
+        <div className="text-center mb-12">
+          <h2 className="text-2xl font-bold text-neutral-900 sm:text-3xl dark:text-neutral-50">
+            Why Smart Tiffin?
+          </h2>
+          <p className="mt-2 text-neutral-500 dark:text-neutral-400">
+            Built for home cooks and food lovers
+          </p>
+        </div>
+
+        <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-4">
+          {features.map((f, i) => (
+            <div
+              key={i}
+              className="rounded-2xl bg-white border border-neutral-200/60 p-6 shadow-sm hover:shadow-md transition-shadow dark:bg-neutral-800 dark:border-neutral-700"
+            >
+              <span className="text-3xl">{f.icon}</span>
+              <h3 className="mt-3 text-base font-semibold text-neutral-900 dark:text-neutral-100">
+                {f.title}
+              </h3>
+              <p className="mt-2 text-sm text-neutral-500 leading-relaxed dark:text-neutral-400">
+                {f.desc}
+              </p>
+            </div>
+          ))}
+        </div>
+      </section>
+
+      {/* ── CTA ─────────────────────────────────────────────────── */}
+      <section className="bg-gradient-to-r from-primary-500 to-primary-600">
+        <div className="mx-auto max-w-7xl px-4 py-16 sm:px-6 lg:px-8 text-center">
+          <h2 className="text-2xl font-bold text-white sm:text-3xl">
+            Are You a Home Cook?
+          </h2>
+          <p className="mt-3 text-primary-100 max-w-lg mx-auto">
+            List your kitchen, reach customers, and grow your home food business. It&apos;s free to start!
+          </p>
+          <Link
+            href="/become-a-cook"
+            className="mt-6 inline-block rounded-xl bg-white px-8 py-3 text-sm font-bold text-primary-600 shadow-lg hover:bg-primary-50 transition-all active:scale-95"
+          >
+            Start Cooking Today →
+          </Link>
+        </div>
+      </section>
     </div>
   );
 }

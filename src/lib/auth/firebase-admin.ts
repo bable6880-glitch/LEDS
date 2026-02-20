@@ -1,0 +1,134 @@
+import { cert, getApps, initializeApp, type App, type ServiceAccount } from "firebase-admin/app";
+import { getAuth, type Auth } from "firebase-admin/auth";
+
+// ─── Custom Auth Error ──────────────────────────────────────────────────────
+
+export class FirebaseAuthError extends Error {
+    code: string;
+    httpStatus: number;
+
+    constructor(message: string, code: string, httpStatus: number) {
+        super(message);
+        this.name = "FirebaseAuthError";
+        this.code = code;
+        this.httpStatus = httpStatus;
+    }
+}
+
+// ─── Singleton Admin Init ───────────────────────────────────────────────────
+
+let _app: App | null = null;
+let _auth: Auth | null = null;
+
+/**
+ * Lazily initialize Firebase Admin SDK (singleton).
+ * Prevents build-time failures when env vars are not available.
+ */
+function getFirebaseAdmin(): Auth {
+    if (_auth) return _auth;
+
+    const projectId = process.env.FIREBASE_PROJECT_ID;
+    const clientEmail = process.env.FIREBASE_CLIENT_EMAIL;
+    const privateKey = process.env.FIREBASE_PRIVATE_KEY;
+
+    if (!projectId || !clientEmail || !privateKey) {
+        throw new FirebaseAuthError(
+            "Firebase Admin environment variables are not configured",
+            "auth/config-missing",
+            500
+        );
+    }
+
+    const firebaseAdminConfig: ServiceAccount = {
+        projectId,
+        clientEmail,
+        privateKey: privateKey.replace(/\\n/g, "\n"),
+    };
+
+    _app =
+        getApps().length === 0
+            ? initializeApp({ credential: cert(firebaseAdminConfig) })
+            : getApps()[0];
+
+    _auth = getAuth(_app);
+    return _auth;
+}
+
+/**
+ * Verify a Firebase ID token and return the decoded claims.
+ * Wraps all Firebase errors into typed FirebaseAuthError with proper HTTP status codes.
+ */
+export async function verifyFirebaseToken(idToken: string) {
+    try {
+        const auth = getFirebaseAdmin();
+        // checkRevoked: true ensures revoked tokens are rejected
+        const decoded = await auth.verifyIdToken(idToken, true);
+        return decoded;
+    } catch (error: unknown) {
+        // Extract Firebase error code if present
+        const firebaseCode =
+            (error as { code?: string })?.code ??
+            (error as { errorInfo?: { code?: string } })?.errorInfo?.code ??
+            "unknown";
+
+        const originalMessage =
+            error instanceof Error ? error.message : "Token verification failed";
+
+        console.error("[Firebase Admin] verifyIdToken failed:", {
+            code: firebaseCode,
+            message: originalMessage,
+        });
+
+        // Map Firebase error codes → user-friendly message + HTTP status
+        switch (firebaseCode) {
+            case "auth/id-token-expired":
+                throw new FirebaseAuthError(
+                    "Token has expired. Please sign in again.",
+                    "auth/id-token-expired",
+                    401
+                );
+
+            case "auth/id-token-revoked":
+                throw new FirebaseAuthError(
+                    "Token has been revoked. Please sign in again.",
+                    "auth/id-token-revoked",
+                    401
+                );
+
+            case "auth/argument-error":
+            case "auth/invalid-id-token":
+                throw new FirebaseAuthError(
+                    "Invalid authentication token.",
+                    "auth/invalid-id-token",
+                    401
+                );
+
+            case "auth/user-disabled":
+                throw new FirebaseAuthError(
+                    "This account has been disabled.",
+                    "auth/user-disabled",
+                    403
+                );
+
+            default:
+                // Catch-all for audience mismatch, certificate errors, etc.
+                if (
+                    originalMessage.includes("audience") ||
+                    originalMessage.includes("aud") ||
+                    originalMessage.includes("project")
+                ) {
+                    throw new FirebaseAuthError(
+                        "Token was issued for a different project. Please sign out and sign in again.",
+                        "auth/invalid-audience",
+                        401
+                    );
+                }
+
+                throw new FirebaseAuthError(
+                    "Authentication failed. Please try again.",
+                    firebaseCode,
+                    401
+                );
+        }
+    }
+}
