@@ -1,5 +1,6 @@
 import Link from "next/link";
 import SearchBar from "@/components/ui/SearchBar";
+import { FeaturedKitchens } from "@/components/home/FeaturedKitchens";
 
 const cities = [
   { name: "Lahore", emoji: "🏙️", count: "120+" },
@@ -90,6 +91,9 @@ export default function HomePage() {
           </div>
         </div>
       </section>
+
+      {/* ── Featured Kitchens (Dynamic) ─────────────────────────── */}
+      <FeaturedKitchens />
 
       {/* ── Browse by City ──────────────────────────────────────── */}
       <section className="mx-auto max-w-7xl px-4 py-16 sm:px-6 lg:px-8">

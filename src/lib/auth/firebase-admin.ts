@@ -132,3 +132,20 @@ export async function verifyFirebaseToken(idToken: string) {
         }
     }
 }
+
+/**
+ * Set custom claims on a Firebase user (e.g., role).
+ * This allows middleware and client to read the role from the token.
+ */
+export async function setUserRoleClaim(
+    firebaseUid: string,
+    role: "CUSTOMER" | "COOK" | "ADMIN"
+) {
+    try {
+        const auth = getFirebaseAdmin();
+        await auth.setCustomUserClaims(firebaseUid, { role });
+    } catch (error) {
+        console.error("[Firebase Admin] setCustomUserClaims failed:", error);
+        // Non-fatal: the DB is the source of truth, claims are supplementary
+    }
+}

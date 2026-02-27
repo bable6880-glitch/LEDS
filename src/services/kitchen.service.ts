@@ -1,12 +1,13 @@
 import { db } from "@/lib/db";
-import { kitchens, users } from "@/lib/db/schema";
+import { kitchens } from "@/lib/db/schema";
 import { eq, and, desc, sql, isNull } from "drizzle-orm";
 import { slugify } from "@/config/constants";
 import { cached, invalidateCache, CacheKeys, CacheTTL } from "@/lib/redis";
 import type { CreateKitchenInput, UpdateKitchenInput, KitchenQueryInput } from "@/lib/validations/kitchen";
 import { NotFoundError, AuthorizationError } from "@/lib/utils/errors";
 
-// ─── Create Kitchen ─────────────────────────────────────────────────────────
+// CHANGED: Removed role update from createKitchen — role escalation is now
+// handled in the API route (POST /api/kitchens) with compensation logic.
 
 export async function createKitchen(ownerId: string, input: CreateKitchenInput) {
     // Generate unique slug
@@ -17,12 +18,6 @@ export async function createKitchen(ownerId: string, input: CreateKitchenInput) 
     if (existingSlug) {
         slug = `${slug}-${Date.now().toString(36)}`;
     }
-
-    // Upgrade user role to COOK
-    await db
-        .update(users)
-        .set({ role: "COOK", updatedAt: new Date() })
-        .where(eq(users.id, ownerId));
 
     const [kitchen] = await db
         .insert(kitchens)

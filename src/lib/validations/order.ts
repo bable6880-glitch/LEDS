@@ -15,7 +15,7 @@ export const createOrderSchema = z.object({
         .min(1, "Order must have at least one item")
         .max(20, "Order can have at most 20 items"),
     notes: z.string().max(1000).optional(),
-    deliveryMode: z.enum(["SELF_PICKUP", "FREE_DELIVERY"]),
+    deliveryMode: z.enum(["SELF_PICKUP", "FREE_DELIVERY"]).optional(),
     customerAddress: z.string().max(500).optional(),
     customerLat: z.number().min(-90).max(90).optional(),
     customerLng: z.number().min(-180).max(180).optional(),

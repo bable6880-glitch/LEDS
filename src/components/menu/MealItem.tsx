@@ -1,6 +1,7 @@
 "use client";
 
 import { useCart } from "@/lib/cart-context";
+import { useAuth } from "@/lib/firebase/auth-context";
 
 type MealData = {
     id: string;
@@ -11,10 +12,15 @@ type MealData = {
     isAvailable: boolean;
     imageUrl: string | null;
     dietaryTags: string[] | null;
+    // U4b: Nutrition fields
+    calories: number | null;
+    servingSize: string | null;
 };
 
 export function MealItem({ meal, kitchenId, kitchenName }: { meal: MealData; kitchenId: string; kitchenName: string }) {
     const { addItem, items, updateQuantity } = useCart();
+    const { user } = useAuth();
+    const isCook = user?.role === "COOK" || user?.role === "ADMIN";
 
     const cartItem = items.find((i) => i.mealId === meal.id);
     const quantity = cartItem?.quantity || 0;
@@ -65,41 +71,59 @@ export function MealItem({ meal, kitchenId, kitchenName }: { meal: MealData; kit
                         )}
                     </div>
 
-                    {/* Add to Cart Actions */}
-                    <div className="mt-3">
-                        {meal.isAvailable ? (
-                            quantity > 0 ? (
-                                <div className="flex items-center gap-3">
-                                    <div className="flex items-center rounded-lg border border-primary-200 bg-primary-50 dark:border-primary-800 dark:bg-primary-900/20">
-                                        <button
-                                            onClick={() => updateQuantity(meal.id, quantity - 1)}
-                                            className="px-3 py-1 text-sm font-bold text-primary-700 hover:bg-primary-100 transition-colors dark:text-primary-400 dark:hover:bg-primary-900/40"
-                                        >
-                                            −
-                                        </button>
-                                        <span className="w-8 text-center text-sm font-bold text-primary-700 dark:text-primary-400">{quantity}</span>
-                                        <button
-                                            onClick={() => updateQuantity(meal.id, quantity + 1)}
-                                            className="px-3 py-1 text-sm font-bold text-primary-700 hover:bg-primary-100 transition-colors dark:text-primary-400 dark:hover:bg-primary-900/40"
-                                        >
-                                            +
-                                        </button>
+                    {/* U4b: Nutrition info */}
+                    {(meal.calories || meal.servingSize) && (
+                        <div className="mt-1.5 flex flex-wrap gap-2 text-xs text-neutral-400 dark:text-neutral-500">
+                            {meal.calories && (
+                                <span className="flex items-center gap-1">
+                                    🔥 {meal.calories} cal
+                                </span>
+                            )}
+                            {meal.servingSize && (
+                                <span className="flex items-center gap-1">
+                                    🍽️ {meal.servingSize}
+                                </span>
+                            )}
+                        </div>
+                    )}
+
+                    {/* Add to Cart Actions — hidden for sellers */}
+                    {!isCook && (
+                        <div className="mt-3" suppressHydrationWarning>
+                            {meal.isAvailable ? (
+                                quantity > 0 ? (
+                                    <div className="flex items-center gap-3">
+                                        <div className="flex items-center rounded-lg border border-primary-200 bg-primary-50 dark:border-primary-800 dark:bg-primary-900/20">
+                                            <button
+                                                onClick={() => updateQuantity(meal.id, quantity - 1)}
+                                                className="px-3 py-1 text-sm font-bold text-primary-700 hover:bg-primary-100 transition-colors dark:text-primary-400 dark:hover:bg-primary-900/40"
+                                            >
+                                                −
+                                            </button>
+                                            <span className="w-8 text-center text-sm font-bold text-primary-700 dark:text-primary-400">{quantity}</span>
+                                            <button
+                                                onClick={() => updateQuantity(meal.id, quantity + 1)}
+                                                className="px-3 py-1 text-sm font-bold text-primary-700 hover:bg-primary-100 transition-colors dark:text-primary-400 dark:hover:bg-primary-900/40"
+                                            >
+                                                +
+                                            </button>
+                                        </div>
                                     </div>
-                                </div>
+                                ) : (
+                                    <button
+                                        onClick={handleAdd}
+                                        className="rounded-lg bg-white border border-neutral-200 px-4 py-1.5 text-sm font-semibold text-primary-600 shadow-sm hover:bg-primary-50 hover:border-primary-200 transition-all active:scale-95 dark:bg-neutral-800 dark:border-neutral-600 dark:text-primary-400 dark:hover:bg-neutral-700"
+                                    >
+                                        Add +
+                                    </button>
+                                )
                             ) : (
-                                <button
-                                    onClick={handleAdd}
-                                    className="rounded-lg bg-white border border-neutral-200 px-4 py-1.5 text-sm font-semibold text-primary-600 shadow-sm hover:bg-primary-50 hover:border-primary-200 transition-all active:scale-95 dark:bg-neutral-800 dark:border-neutral-600 dark:text-primary-400 dark:hover:bg-neutral-700"
-                                >
-                                    Add +
+                                <button disabled className="text-sm text-neutral-400 cursor-not-allowed dark:text-neutral-600">
+                                    Out of stock
                                 </button>
-                            )
-                        ) : (
-                            <button disabled className="text-sm text-neutral-400 cursor-not-allowed dark:text-neutral-600">
-                                Out of stock
-                            </button>
-                        )}
-                    </div>
+                            )}
+                        </div>
+                    )}
                 </div>
             </div>
         </div>

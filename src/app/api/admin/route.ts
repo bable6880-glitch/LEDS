@@ -38,10 +38,100 @@ export async function GET(request: NextRequest) {
         if (error) return error;
 
         const action = request.nextUrl.searchParams.get("action");
+        const page = parseInt(request.nextUrl.searchParams.get("page") || "1");
+        const limit = parseInt(request.nextUrl.searchParams.get("limit") || "20");
 
         if (action === "stats") {
             const stats = await getPlatformStats();
             return apiSuccess(stats);
+        }
+
+        // CHANGED [H5]: Added users listing for admin
+        if (action === "users") {
+            const { users: usersTable } = await import("@/lib/db/schema");
+            const { db: database } = await import("@/lib/db");
+            const { desc: descOrder, sql: sqlFn } = await import("drizzle-orm");
+            const offset = (page - 1) * limit;
+
+            const [data, countResult] = await Promise.all([
+                database.query.users.findMany({
+                    orderBy: [descOrder(usersTable.createdAt)],
+                    limit,
+                    offset,
+                    columns: {
+                        id: true,
+                        name: true,
+                        email: true,
+                        role: true,
+                        isActive: true,
+                        createdAt: true,
+                        avatarUrl: true,
+                    },
+                }),
+                database
+                    .select({ count: sqlFn<number>`count(*)` })
+                    .from(usersTable),
+            ]);
+
+            return apiPaginated(data, { page, limit, total: Number(countResult[0].count) });
+        }
+
+        // CHANGED [H5]: Added kitchens listing for admin
+        if (action === "kitchens") {
+            const { kitchens: kitchensTable } = await import("@/lib/db/schema");
+            const { db: database } = await import("@/lib/db");
+            const { desc: descOrder, sql: sqlFn } = await import("drizzle-orm");
+            const offset = (page - 1) * limit;
+
+            const [data, countResult] = await Promise.all([
+                database.query.kitchens.findMany({
+                    orderBy: [descOrder(kitchensTable.createdAt)],
+                    limit,
+                    offset,
+                    columns: {
+                        id: true,
+                        name: true,
+                        city: true,
+                        status: true,
+                        isVerified: true,
+                        avgRating: true,
+                        reviewCount: true,
+                        createdAt: true,
+                    },
+                    with: {
+                        owner: { columns: { id: true, name: true, email: true } },
+                    },
+                }),
+                database
+                    .select({ count: sqlFn<number>`count(*)` })
+                    .from(kitchensTable),
+            ]);
+
+            return apiPaginated(data, { page, limit, total: Number(countResult[0].count) });
+        }
+
+        // CHANGED [H5]: Added audit log listing for admin
+        if (action === "audit_log") {
+            const { adminAuditLog } = await import("@/lib/db/schema");
+            const { db: database } = await import("@/lib/db");
+            const { desc: descOrder, sql: sqlFn } = await import("drizzle-orm");
+            const offset = (page - 1) * limit;
+
+            const [data, countResult] = await Promise.all([
+                database.query.adminAuditLog.findMany({
+                    orderBy: [descOrder(adminAuditLog.createdAt)],
+                    limit,
+                    offset,
+                    with: {
+                        admin: { columns: { id: true, name: true } },
+                    },
+                }),
+                database
+                    .select({ count: sqlFn<number>`count(*)` })
+                    .from(adminAuditLog),
+            ]);
+
+            return apiPaginated(data, { page, limit, total: Number(countResult[0].count) });
         }
 
         // Default: list reports
@@ -51,8 +141,6 @@ export async function GET(request: NextRequest) {
             | "RESOLVED"
             | "DISMISSED"
             | undefined;
-        const page = parseInt(request.nextUrl.searchParams.get("page") || "1");
-        const limit = parseInt(request.nextUrl.searchParams.get("limit") || "20");
 
         const result = await getReports(status || undefined, page, limit);
 

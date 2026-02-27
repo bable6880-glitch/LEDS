@@ -297,6 +297,7 @@ interface AuthContextType extends AuthState {
     signOutUser: () => Promise<void>;
     getIdToken: () => Promise<string | null>;
     sendPasswordReset: (email: string) => Promise<boolean>;
+    refreshUser: () => Promise<void>;
 };
 
 const AuthContext = createContext<AuthContextType | null>(null);
@@ -561,9 +562,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         }
     }, []);
 
+    // CHANGED: Added refreshUser to force re-sync after role changes (e.g., kitchen registration)
+    const refreshUser = useCallback(async () => {
+        if (!state.firebaseUser) return;
+        // Force token refresh to pick up new custom claims
+        try {
+            await state.firebaseUser.getIdToken(true);
+        } catch { /* ignore — syncUser will handle stale tokens */ }
+        await syncUser(state.firebaseUser);
+    }, [state.firebaseUser, syncUser]);
+
     return (
         <AuthContext.Provider
-            value={{ ...state, signInWithGoogle, signUpWithEmail, signInWithEmail, signOutUser, getIdToken, sendPasswordReset }}
+            value={{ ...state, signInWithGoogle, signUpWithEmail, signInWithEmail, signOutUser, getIdToken, sendPasswordReset, refreshUser }}
         >
             {children}
         </AuthContext.Provider>

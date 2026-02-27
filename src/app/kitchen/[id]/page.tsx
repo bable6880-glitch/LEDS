@@ -1,6 +1,8 @@
 import { Suspense } from "react";
 import type { Metadata } from "next";
 import Link from "next/link";
+import { MapLazy } from "@/components/map/MapLazy";
+import { ReportButton } from "@/components/kitchen/ReportButton";
 
 type Props = { params: Promise<{ id: string }> };
 
@@ -15,12 +17,17 @@ type MealData = {
     isAvailable: boolean;
     imageUrl: string | null;
     dietaryTags: string[] | null;
+    calories: number | null;
+    servingSize: string | null;
 };
 
 type ReviewData = {
     id: string;
     rating: number;
     comment: string | null;
+    sellerReply: string | null;
+    sellerRepliedAt: string | null;
+    isVerifiedPurchase: boolean;
     user: { name: string | null } | null;
 };
 
@@ -116,12 +123,10 @@ function MealCard({ meal }: { meal: MealData }) {
     );
 }
 
-// ─── Review Card ────────────────────────────────────────────────────────────
+// ─── Review Card (U4a + U4d) ────────────────────────────────────────────────
 
 import { MealItem } from "@/components/menu/MealItem";
 import { CartPanel } from "@/components/cart/CartPanel";
-
-// ... (keep ReviewCard as is)
 
 function ReviewCard({ review }: { review: ReviewData }) {
     return (
@@ -130,10 +135,18 @@ function ReviewCard({ review }: { review: ReviewData }) {
                 <div className="h-9 w-9 rounded-full bg-primary-100 flex items-center justify-center text-sm font-bold text-primary-700 dark:bg-primary-900/30 dark:text-primary-300">
                     {review.user?.name?.[0]?.toUpperCase() || "U"}
                 </div>
-                <div>
-                    <p className="text-sm font-semibold text-neutral-900 dark:text-neutral-100">
-                        {review.user?.name || "Anonymous"}
-                    </p>
+                <div className="flex-1">
+                    <div className="flex items-center gap-2">
+                        <p className="text-sm font-semibold text-neutral-900 dark:text-neutral-100">
+                            {review.user?.name || "Anonymous"}
+                        </p>
+                        {/* U4d: Verified purchase badge */}
+                        {review.isVerifiedPurchase && (
+                            <span className="rounded-full bg-accent-50 px-2 py-0.5 text-[10px] font-semibold text-accent-700 dark:bg-accent-900/30 dark:text-accent-300">
+                                ✓ Verified Order
+                            </span>
+                        )}
+                    </div>
                     <div className="flex items-center gap-1">
                         {Array.from({ length: 5 }).map((_, i) => (
                             <svg
@@ -151,13 +164,21 @@ function ReviewCard({ review }: { review: ReviewData }) {
             {review.comment && (
                 <p className="text-sm text-neutral-600 leading-relaxed dark:text-neutral-300">{review.comment}</p>
             )}
+
+            {/* U4a: Seller reply */}
+            {review.sellerReply && (
+                <div className="mt-3 ml-4 pl-4 border-l-2 border-primary-200 dark:border-primary-800">
+                    <p className="text-xs font-semibold text-primary-700 dark:text-primary-400 mb-1">👨‍🍳 Cook&apos;s Reply</p>
+                    <p className="text-sm text-neutral-600 dark:text-neutral-300">{review.sellerReply}</p>
+                </div>
+            )}
         </div>
     );
 }
 
 // ─── Kitchen Content ────────────────────────────────────────────────────────
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
+// ─── Review Card (U4a + U4d) ────────────────────────────────────────────────
 async function KitchenContent({ id }: { id: string }) {
     const [kitchen, menu, reviewData] = await Promise.all([
         getKitchen(id),
@@ -253,7 +274,55 @@ async function KitchenContent({ id }: { id: string }) {
                                 {kitchen.totalReviews || 0} reviews
                             </span>
                         </div>
+
+                        {/* Delivery Badges */}
+                        {kitchen.deliveryOptions && kitchen.deliveryOptions.length > 0 && (
+                            <div className="mt-4 flex flex-wrap gap-2">
+                                {kitchen.deliveryOptions.includes("SELF_PICKUP") && (
+                                    <span className="rounded-full bg-neutral-100 px-3 py-1.5 text-xs font-semibold text-neutral-700 dark:bg-neutral-700 dark:text-neutral-300">
+                                        🏃 Self Pickup
+                                    </span>
+                                )}
+                                {kitchen.deliveryOptions.includes("FREE_DELIVERY") && (
+                                    <span className="rounded-full bg-accent-50 px-3 py-1.5 text-xs font-semibold text-accent-700 dark:bg-accent-900/20 dark:text-accent-300">
+                                        🛵 Free Delivery
+                                    </span>
+                                )}
+                            </div>
+                        )}
+
+                        {/* U1: Report Button */}
+                        <div className="mt-4">
+                            <ReportButton kitchenId={kitchen.id} kitchenName={kitchen.name} />
+                        </div>
                     </div>
+
+                    {/* U4c: Kitchen Gallery */}
+                    {kitchen.images && kitchen.images.length > 0 && (
+                        <section className="mt-8">
+                            <h2 className="text-lg font-bold text-neutral-900 mb-4 dark:text-neutral-50">📸 Gallery</h2>
+                            <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                                {kitchen.images.map((img: string, idx: number) => (
+                                    <div key={idx} className="aspect-square rounded-xl overflow-hidden bg-neutral-100 dark:bg-neutral-700">
+                                        <img src={img} alt={`${kitchen.name} photo ${idx + 1}`} className="h-full w-full object-cover hover:scale-105 transition-transform duration-300" loading="lazy" />
+                                    </div>
+                                ))}
+                            </div>
+                        </section>
+                    )}
+
+                    {/* U2: Kitchen Location Map */}
+                    {kitchen.latitude && kitchen.longitude && (
+                        <section className="mt-8">
+                            <h2 className="text-lg font-bold text-neutral-900 mb-4 dark:text-neutral-50">📍 Location</h2>
+                            <div className="h-64 rounded-xl overflow-hidden border border-neutral-200 dark:border-neutral-700">
+                                <MapLazy
+                                    center={[Number(kitchen.latitude), Number(kitchen.longitude)]}
+                                    markers={[{ position: [Number(kitchen.latitude), Number(kitchen.longitude)], title: kitchen.name }]}
+                                />
+                            </div>
+                        </section>
+                    )}
 
                     {/* Menu */}
                     <section className="mt-12">

@@ -111,6 +111,7 @@ export const users = pgTable(
         updatedAt: timestamp("updated_at", { withTimezone: true })
             .defaultNow()
             .notNull(),
+        fcmToken: text("fcm_token"), // Device token for push notifications
         deletedAt: timestamp("deleted_at", { withTimezone: true }),
     },
     (table) => [
@@ -327,6 +328,11 @@ export const orders = pgTable(
         customerLat: decimal("customer_lat", { precision: 10, scale: 7 }),
         customerLng: decimal("customer_lng", { precision: 10, scale: 7 }),
         customerAddress: text("customer_address"),
+
+        // N1: Payment fields
+        paymentMethod: paymentMethodEnum("payment_method").default("STRIPE"),
+        paymentStatus: varchar("payment_status", { length: 20 }).default("UNPAID").notNull(), // UNPAID | PAID | REFUNDED | FAILED
+        stripePaymentIntentId: varchar("stripe_payment_intent_id", { length: 255 }),
 
         // Timestamps
         createdAt: timestamp("created_at", { withTimezone: true })

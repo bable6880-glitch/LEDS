@@ -58,6 +58,16 @@ export async function PATCH(
             .where(eq(orders.id, orderId))
             .returning();
 
+        // N2: Notification on status change
+        if (status === "ACCEPTED" || status === "COMPLETED") {
+            const { notifyOrderAccepted, notifyOrderCompleted } = await import("@/services/notification.service");
+            if (status === "ACCEPTED") {
+                await notifyOrderAccepted(order.customerId, orderId, order.kitchen.name);
+            } else {
+                await notifyOrderCompleted(order.customerId, orderId, order.kitchen.name);
+            }
+        }
+
         return apiSuccess(updatedOrder);
 
     } catch (error) {

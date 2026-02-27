@@ -1,17 +1,22 @@
+// CHANGED: Added Google Sign-In button below email/password form.
+// Google login triggers Firebase popup → syncs user → routes by role.
+
 "use client";
 
 import { useAuth } from "@/lib/firebase/auth-context";
 import { useRouter } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { cookLoginSchema, type CookLoginInput } from "@/lib/validations/auth";
 import Link from "next/link";
 
 export default function SellerLoginPage() {
-    const { user, loading: authLoading, signInWithEmail, error: authError } = useAuth();
+    const { user, loading: authLoading, signInWithEmail, signInWithGoogle, getIdToken, error: authError } = useAuth();
     const router = useRouter();
     const [showPassword, setShowPassword] = useState(false);
+    const [googleLoading, setGoogleLoading] = useState(false);
+    const [googleError, setGoogleError] = useState<string | null>(null);
 
     const {
         register,
@@ -34,6 +39,63 @@ export default function SellerLoginPage() {
     const onSubmit = async (data: CookLoginInput) => {
         await signInWithEmail(data.email, data.password);
     };
+
+    // ── Google Sign-In for Cooks ──────────────────────────────────────────────
+    const handleGoogleSignIn = useCallback(async () => {
+        setGoogleLoading(true);
+        setGoogleError(null);
+        try {
+            // Step 1: Trigger Google popup via Firebase
+            await signInWithGoogle();
+
+            // After signInWithGoogle, onAuthStateChanged fires and syncs the user.
+            // The useEffect above handles routing based on the role returned from sync.
+            // We just need to wait for user state to update (handled by useEffect).
+
+            // Get fresh token to call sync manually for immediate role check
+            const token = await getIdToken();
+            if (!token) {
+                // User closed popup or auth failed silently
+                setGoogleLoading(false);
+                return;
+            }
+
+            // Call sync to get the current role from DB
+            const res = await fetch("/api/auth/sync", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ idToken: token }),
+            });
+
+            if (!res.ok) {
+                throw new Error("Sync failed");
+            }
+
+            const body = await res.json();
+            const role = body.data?.role;
+
+            // Route based on the DB role
+            if (role === "COOK") {
+                router.push("/dashboard");
+            } else if (role === "ADMIN") {
+                router.push("/admin");
+            } else {
+                // CUSTOMER — needs to register a kitchen
+                router.push("/become-a-cook");
+            }
+        } catch (err) {
+            // Firebase popup closed by user → err.code === 'auth/popup-closed-by-user'
+            const message = err instanceof Error ? err.message : "";
+            if (message.includes("popup-closed-by-user") || message.includes("cancelled-popup-request")) {
+                // Silent fail — user just closed the popup
+                setGoogleLoading(false);
+                return;
+            }
+            setGoogleError("Sign-in failed. Please try again.");
+        } finally {
+            setGoogleLoading(false);
+        }
+    }, [signInWithGoogle, getIdToken, router]);
 
     return (
         <div className="min-h-[calc(100vh-80px)] flex">
@@ -104,10 +166,10 @@ export default function SellerLoginPage() {
                                 </p>
                             </div>
 
-                            {authError && (
+                            {(authError || googleError) && (
                                 <div className="mb-5 rounded-xl bg-red-50 border border-red-200 px-4 py-3 text-sm text-red-700 dark:bg-red-900/30 dark:border-red-800 dark:text-red-300 flex items-center gap-2">
                                     <span>⚠️</span>
-                                    <span>{authError}</span>
+                                    <span>{authError || googleError}</span>
                                 </div>
                             )}
 
@@ -172,6 +234,38 @@ export default function SellerLoginPage() {
                                     ) : "Sign In →"}
                                 </button>
                             </form>
+
+                            {/* ── Divider ── */}
+                            <div className="relative my-6">
+                                <div className="absolute inset-0 flex items-center">
+                                    <div className="w-full border-t border-neutral-200 dark:border-neutral-700" />
+                                </div>
+                                <div className="relative flex justify-center">
+                                    <span className="bg-white px-4 text-xs text-neutral-400 uppercase tracking-widest dark:bg-neutral-800 dark:text-neutral-500">
+                                        or
+                                    </span>
+                                </div>
+                            </div>
+
+                            {/* ── Google Sign-In Button ── */}
+                            <button
+                                type="button"
+                                onClick={handleGoogleSignIn}
+                                disabled={googleLoading || authLoading}
+                                className="group w-full flex items-center justify-center gap-3 rounded-xl border-2 border-neutral-200 bg-white px-4 py-3.5 text-sm font-semibold text-neutral-700 shadow-sm hover:border-orange-300 hover:shadow-lg hover:shadow-orange-100/50 transition-all duration-300 active:scale-[0.97] disabled:opacity-60 dark:bg-neutral-700 dark:border-neutral-600 dark:text-neutral-200 dark:hover:border-orange-500 dark:hover:shadow-orange-900/20"
+                            >
+                                {googleLoading ? (
+                                    <span className="h-5 w-5 animate-spin rounded-full border-2 border-neutral-300 border-t-orange-500" />
+                                ) : (
+                                    <svg className="h-5 w-5 transition-transform group-hover:scale-110" viewBox="0 0 24 24">
+                                        <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92a5.06 5.06 0 01-2.2 3.32v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.1z" />
+                                        <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" />
+                                        <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" />
+                                        <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" />
+                                    </svg>
+                                )}
+                                {googleLoading ? "Signing in..." : "Sign in with Google"}
+                            </button>
 
                             <div className="mt-6 text-center text-sm text-neutral-500 dark:text-neutral-400">
                                 Don&apos;t have a seller account?{" "}

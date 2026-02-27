@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { orders, orderItems, meals, users, kitchens } from "@/lib/db/schema";
 import { eq, and, gte, sql, desc } from "drizzle-orm";
-import { getAuthUser } from "@/lib/utils/get-auth-user";
+import { getAuthUser } from "@/lib/auth/get-auth-user";
 import { apiUnauthorized, apiForbidden, apiNotFound, apiInternalError } from "@/lib/utils/api-response";
 
 export async function GET(

@@ -12,7 +12,9 @@ export function CartPanel() {
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const [isOpen, setIsOpen] = useState(false);
-    const [deliveryMode, setDeliveryMode] = useState<"SELF_PICKUP" | "FREE_DELIVERY">("SELF_PICKUP");
+
+    // Sellers (COOK role) cannot order — hide the entire cart
+    const isCook = user?.role === "COOK" || user?.role === "ADMIN";
 
     const proceedToCheckout = async () => {
         if (itemCount === 0) return;
@@ -29,7 +31,6 @@ export function CartPanel() {
         setError(null);
 
         try {
-            // Get auth token for the API call
             const token = await getIdToken();
             if (!token) {
                 setError("Authentication failed. Please log in again.");
@@ -37,18 +38,16 @@ export function CartPanel() {
                 return;
             }
 
-            // Get location if delivery mode is FREE_DELIVERY
+            // Get location for delivery
             let lat: number | undefined, lng: number | undefined;
-            if (deliveryMode === "FREE_DELIVERY") {
-                try {
-                    const pos = await new Promise<GeolocationPosition>((resolve, reject) => {
-                        navigator.geolocation.getCurrentPosition(resolve, reject, { timeout: 5000 });
-                    });
-                    lat = pos.coords.latitude;
-                    lng = pos.coords.longitude;
-                } catch {
-                    // Location not available — continue without it
-                }
+            try {
+                const pos = await new Promise<GeolocationPosition>((resolve, reject) => {
+                    navigator.geolocation.getCurrentPosition(resolve, reject, { timeout: 5000 });
+                });
+                lat = pos.coords.latitude;
+                lng = pos.coords.longitude;
+            } catch {
+                // Location not available — continue without it
             }
 
             const res = await fetch("/api/orders", {
@@ -63,7 +62,7 @@ export function CartPanel() {
                         mealId: i.mealId,
                         quantity: i.quantity,
                     })),
-                    deliveryMode,
+                    // deliveryMode is auto-resolved on the server from kitchen config
                     notes: "",
                     customerLat: lat,
                     customerLng: lng,
@@ -75,12 +74,11 @@ export function CartPanel() {
                 throw new Error(data.error?.message || "Failed to place order");
             }
 
-            const { data: order } = await res.json();
+            await res.json();
 
-            // Success — clear cart & go to order details
             clearCart();
             alert("Order placed successfully! 🚀");
-            router.push(`/orders/${order.id}`);
+            router.push(`/kitchen/${kitchenId}`);
 
         } catch (err: unknown) {
             setError(err instanceof Error ? err.message : "Something went wrong");
@@ -89,7 +87,8 @@ export function CartPanel() {
         }
     };
 
-    if (itemCount === 0) {
+    // Don't render anything if empty, or if the user is a Cook
+    if (itemCount === 0 || isCook) {
         return null;
     }
 
@@ -173,30 +172,8 @@ export function CartPanel() {
                         ))}
                     </div>
 
-                    {/* Footer / Checkout */}
+                    {/* Footer / Checkout — no delivery mode toggle */}
                     <div className="border-t border-neutral-100 p-5 bg-neutral-50 dark:bg-neutral-900/50 dark:border-neutral-800/50">
-
-                        <div className="mb-4 flex rounded-lg bg-neutral-100 p-1 dark:bg-neutral-800">
-                            <button
-                                onClick={() => setDeliveryMode("SELF_PICKUP")}
-                                className={`flex-1 rounded-md py-1.5 text-xs font-semibold max-w-[50%] transition-all ${deliveryMode === "SELF_PICKUP"
-                                    ? "bg-white text-neutral-900 shadow-sm dark:bg-neutral-700 dark:text-white"
-                                    : "text-neutral-500 hover:text-neutral-900 dark:text-neutral-400"
-                                    }`}
-                            >
-                                🏃 Self Pickup
-                            </button>
-                            <button
-                                onClick={() => setDeliveryMode("FREE_DELIVERY")}
-                                className={`flex-1 rounded-md py-1.5 text-xs font-semibold max-w-[50%] transition-all ${deliveryMode === "FREE_DELIVERY"
-                                    ? "bg-white text-neutral-900 shadow-sm dark:bg-neutral-700 dark:text-white"
-                                    : "text-neutral-500 hover:text-neutral-900 dark:text-neutral-400"
-                                    }`}
-                            >
-                                🛵 Free Delivery
-                            </button>
-                        </div>
-
                         <div className="flex items-center justify-between mb-4">
                             <span className="text-neutral-600 dark:text-neutral-400">Total</span>
                             <span className="text-xl font-bold text-neutral-900 dark:text-white">Rs. {total}</span>
@@ -215,10 +192,6 @@ export function CartPanel() {
                         >
                             {isSubmitting ? "Placing Order..." : `Checkout • Rs. ${total}`}
                         </button>
-
-                        <p className="mt-3 text-center text-xs text-neutral-400 dark:text-neutral-500">
-                            Free delivery within 2km range
-                        </p>
                     </div>
                 </div>
             </div>

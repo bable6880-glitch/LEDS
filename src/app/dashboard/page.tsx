@@ -52,11 +52,13 @@ function DashboardContent() {
     const [analyticsMonth, setAnalyticsMonth] = useState("");
     const [loading, setLoading] = useState(true);
 
+    // CHANGED [P4]: Parallelized independent data fetches
     const loadDashboard = useCallback(async () => {
         try {
             const token = await getIdToken();
             if (!token) return;
 
+            // Step 1: Fetch kitchen info first (other fetches depend on kitchenId)
             const kitchenRes = await fetch("/api/kitchens?ownerId=me", {
                 headers: { Authorization: `Bearer ${token}` },
             });
@@ -69,40 +71,53 @@ function DashboardContent() {
                 if (kitchens.length > 0) {
                     setKitchen(kitchens[0]);
                     kitchenId = kitchens[0].id;
-                    const menuRes = await fetch(`/api/kitchens/${kitchenId}/menu`);
-                    if (menuRes.ok) {
-                        const menuData = await menuRes.json();
-                        setStats((prev) => ({ ...prev, totalMeals: (menuData.data || []).length }));
-                    }
                 }
             }
 
-            const ordersRes = await fetch("/api/orders", {
-                headers: { Authorization: `Bearer ${token}` },
-            });
-            if (ordersRes.ok) {
-                const ordersData = await ordersRes.json();
-                const items = ordersData.data || [];
-                setOrders(items);
-                setStats((prev) => ({ ...prev, totalOrders: items.length }));
-            }
+            // Step 2: Fire independent fetches in parallel
+            const fetchPromises: Promise<void>[] = [];
 
-            // Fetch analytics
+            // Orders fetch (independent — only needs token)
+            fetchPromises.push(
+                fetch("/api/orders", {
+                    headers: { Authorization: `Bearer ${token}` },
+                }).then(async (res) => {
+                    if (res.ok) {
+                        const ordersData = await res.json();
+                        const items = ordersData.data || [];
+                        setOrders(items);
+                        setStats((prev) => ({ ...prev, totalOrders: items.length }));
+                    }
+                })
+            );
+
             if (kitchenId) {
-                try {
-                    const analyticsRes = await fetch(`/api/kitchens/${kitchenId}/analytics`, {
+                // Menu count fetch (needs kitchenId)
+                fetchPromises.push(
+                    fetch(`/api/kitchens/${kitchenId}/menu`).then(async (res) => {
+                        if (res.ok) {
+                            const menuData = await res.json();
+                            setStats((prev) => ({ ...prev, totalMeals: (menuData.data || []).length }));
+                        }
+                    })
+                );
+
+                // Analytics fetch (needs kitchenId + token)
+                fetchPromises.push(
+                    fetch(`/api/kitchens/${kitchenId}/analytics`, {
                         headers: { Authorization: `Bearer ${token}` },
-                    });
-                    if (analyticsRes.ok) {
-                        const analyticsData = await analyticsRes.json();
-                        setTopBuyers(analyticsData.data?.topBuyers || []);
-                        setTopFood(analyticsData.data?.topFood || []);
-                        setAnalyticsMonth(analyticsData.data?.month || "");
-                    }
-                } catch {
-                    /* analytics non-critical */
-                }
+                    }).then(async (res) => {
+                        if (res.ok) {
+                            const analyticsData = await res.json();
+                            setTopBuyers(analyticsData.data?.topBuyers || []);
+                            setTopFood(analyticsData.data?.topFood || []);
+                            setAnalyticsMonth(analyticsData.data?.month || "");
+                        }
+                    }).catch(() => { /* analytics non-critical */ })
+                );
             }
+
+            await Promise.all(fetchPromises);
         } catch (err) {
             console.error("Dashboard load error:", err);
         } finally {
@@ -186,7 +201,7 @@ function DashboardContent() {
                     </div>
 
                     {/* Quick Actions */}
-                    <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5 mb-8">
+                    <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6 mb-8">
                         <Link href="/dashboard/menu" className="rounded-2xl border border-neutral-200/60 bg-white p-4 shadow-sm hover:shadow-md transition-all group text-center dark:bg-neutral-800 dark:border-neutral-700">
                             <span className="text-2xl block">🍱</span>
                             <h3 className="mt-1 text-sm font-semibold text-neutral-900 group-hover:text-primary-600 dark:text-neutral-100">Menu</h3>
@@ -206,6 +221,10 @@ function DashboardContent() {
                         <Link href="/dashboard/subscription" className="rounded-2xl border border-accent-200/60 bg-gradient-to-br from-accent-50 to-white p-4 shadow-sm hover:shadow-md transition-all group text-center dark:from-accent-900/20 dark:to-neutral-800 dark:border-accent-800">
                             <span className="text-2xl block">💎</span>
                             <h3 className="mt-1 text-sm font-semibold text-accent-700 dark:text-accent-300">Premium</h3>
+                        </Link>
+                        <Link href="/explore" className="rounded-2xl border border-primary-200/60 bg-gradient-to-br from-primary-50 to-white p-4 shadow-sm hover:shadow-md transition-all group text-center dark:from-primary-900/20 dark:to-neutral-800 dark:border-primary-800">
+                            <span className="text-2xl block">🔍</span>
+                            <h3 className="mt-1 text-sm font-semibold text-primary-700 dark:text-primary-300">Browse Kitchens</h3>
                         </Link>
                     </div>
 

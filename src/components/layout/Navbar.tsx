@@ -35,19 +35,6 @@ export default function Navbar() {
                         <div className="h-8 w-20 rounded-lg animate-shimmer" />
                     ) : user ? (
                         <div className="flex items-center gap-4">
-                            {/* Cart icon for customers only */}
-                            {!isCook && (
-                                <Link
-                                    href="/cart"
-                                    className="relative p-2 rounded-lg text-neutral-600 hover:bg-neutral-100 transition-colors dark:text-neutral-300 dark:hover:bg-neutral-800"
-                                    title="Cart"
-                                >
-                                    <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 3h2l.4 2M7 13h10l4-8H5.4M7 13L5.4 5M7 13l-2.293 2.293c-.63.63-.184 1.707.707 1.707H17m0 0a2 2 0 100 4 2 2 0 000-4zm-8 2a2 2 0 100 4 2 2 0 000-4z" />
-                                    </svg>
-                                </Link>
-                            )}
-
                             {/* Profile dropdown */}
                             <div className="relative">
                                 <button
@@ -93,16 +80,6 @@ export default function Navbar() {
                                                     📋 Kitchen Orders
                                                 </Link>
                                             </>
-                                        )}
-
-                                        {!isCook && (
-                                            <Link
-                                                href="/orders"
-                                                onClick={() => setProfileOpen(false)}
-                                                className="block px-4 py-2 text-sm text-neutral-700 hover:bg-neutral-50 dark:text-neutral-300 dark:hover:bg-neutral-700"
-                                            >
-                                                📦 My Orders
-                                            </Link>
                                         )}
 
                                         {user.role === "ADMIN" && (
@@ -198,24 +175,7 @@ export default function Navbar() {
                                     </>
                                 )}
 
-                                {!isCook && (
-                                    <>
-                                        <Link
-                                            href="/orders"
-                                            onClick={() => setMobileOpen(false)}
-                                            className="block rounded-lg px-3 py-2.5 text-sm font-medium text-neutral-700 hover:bg-neutral-100 dark:text-neutral-300 dark:hover:bg-neutral-800"
-                                        >
-                                            📦 My Orders
-                                        </Link>
-                                        <Link
-                                            href="/cart"
-                                            onClick={() => setMobileOpen(false)}
-                                            className="block rounded-lg px-3 py-2.5 text-sm font-medium text-neutral-700 hover:bg-neutral-100 dark:text-neutral-300 dark:hover:bg-neutral-800"
-                                        >
-                                            🛒 Cart
-                                        </Link>
-                                    </>
-                                )}
+                                {/* No "My Orders" or "Cart" for customers — clean flow */}
 
                                 <button
                                     onClick={() => { setMobileOpen(false); signOutUser(); }}

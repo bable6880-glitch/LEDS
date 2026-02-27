@@ -2,7 +2,7 @@
 
 import { useAuth } from "@/lib/firebase/auth-context";
 import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import {
@@ -36,6 +36,7 @@ export default function BecomeACookPage() {
         error: authError,
         signInWithGoogle,
         getIdToken,
+        refreshUser,
     } = useAuth();
     const router = useRouter();
     const [step, setStep] = useState(1);
@@ -59,6 +60,15 @@ export default function BecomeACookPage() {
     });
 
     const totalSteps = 3;
+
+    // CHANGED: Redirect COOK/ADMIN users away — they already have a kitchen
+    useEffect(() => {
+        if (user && !authLoading) {
+            if (user.role === "COOK" || user.role === "ADMIN") {
+                router.push("/dashboard");
+            }
+        }
+    }, [user, authLoading, router]);
 
     // ── Step Navigation ──────────────────────────────────────────────────────
     const goNext = async () => {
@@ -85,6 +95,8 @@ export default function BecomeACookPage() {
     };
 
     // ── Submit ───────────────────────────────────────────────────────────────
+    // CHANGED: After kitchen creation, force token refresh, re-sync auth state,
+    // and strictly redirect to /dashboard (not /kitchen/{id}).
     const onSubmit = async (data: CreateKitchenInput) => {
         setSubmitting(true);
         setError(null);
@@ -116,6 +128,10 @@ export default function BecomeACookPage() {
                 throw new Error(msg);
             }
 
+            // Force Firebase token refresh to pick up new COOK custom claims
+            await refreshUser();
+
+            // Strict redirect to dashboard
             router.push("/dashboard?registered=true");
         } catch (err) {
             setError(err instanceof Error ? err.message : "Something went wrong");
@@ -219,18 +235,18 @@ export default function BecomeACookPage() {
                         <div key={label} className="flex items-center gap-2">
                             <div
                                 className={`h-8 w-8 rounded-full flex items-center justify-center text-sm font-bold transition-all ${idx + 1 < step
-                                        ? "bg-accent-500 text-white"
-                                        : idx + 1 === step
-                                            ? "bg-primary-500 text-white ring-4 ring-primary-100 dark:ring-primary-900/30"
-                                            : "bg-neutral-200 text-neutral-500 dark:bg-neutral-700 dark:text-neutral-400"
+                                    ? "bg-accent-500 text-white"
+                                    : idx + 1 === step
+                                        ? "bg-primary-500 text-white ring-4 ring-primary-100 dark:ring-primary-900/30"
+                                        : "bg-neutral-200 text-neutral-500 dark:bg-neutral-700 dark:text-neutral-400"
                                     }`}
                             >
                                 {idx + 1 < step ? "✓" : idx + 1}
                             </div>
                             <span
                                 className={`text-xs font-medium hidden sm:inline ${idx + 1 <= step
-                                        ? "text-primary-600 dark:text-primary-400"
-                                        : "text-neutral-400 dark:text-neutral-500"
+                                    ? "text-primary-600 dark:text-primary-400"
+                                    : "text-neutral-400 dark:text-neutral-500"
                                     }`}
                             >
                                 {label}
@@ -415,8 +431,8 @@ export default function BecomeACookPage() {
                                             type="button"
                                             onClick={() => toggleCuisine(c)}
                                             className={`rounded-full px-4 py-2 text-sm font-medium transition-all ${isSelected
-                                                    ? "bg-primary-500 text-white shadow-sm scale-105"
-                                                    : "bg-neutral-100 text-neutral-600 hover:bg-neutral-200 dark:bg-neutral-700 dark:text-neutral-300 dark:hover:bg-neutral-600"
+                                                ? "bg-primary-500 text-white shadow-sm scale-105"
+                                                : "bg-neutral-100 text-neutral-600 hover:bg-neutral-200 dark:bg-neutral-700 dark:text-neutral-300 dark:hover:bg-neutral-600"
                                                 }`}
                                         >
                                             {isSelected && "✓ "}

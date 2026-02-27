@@ -164,3 +164,41 @@ async function recalculateKitchenRating(kitchenId: string) {
         })
         .where(eq(kitchens.id, kitchenId));
 }
+
+// ─── Seller Reply to Review (U4a) ──────────────────────────────────────────
+
+export async function addSellerReply(
+    reviewId: string,
+    kitchenOwnerId: string,
+    reply: string
+) {
+    const review = await db.query.reviews.findFirst({
+        where: eq(reviews.id, reviewId),
+    });
+
+    if (!review) throw new NotFoundError("Review");
+
+    // Verify the kitchen owner
+    const kitchen = await db.query.kitchens.findFirst({
+        where: eq(kitchens.id, review.kitchenId),
+    });
+
+    if (!kitchen || kitchen.ownerId !== kitchenOwnerId) {
+        throw new NotFoundError("You do not own this kitchen");
+    }
+
+    const [updated] = await db
+        .update(reviews)
+        .set({
+            sellerReply: reply,
+            sellerRepliedAt: new Date(),
+            updatedAt: new Date(),
+        })
+        .where(eq(reviews.id, reviewId))
+        .returning();
+
+    await invalidateCache(CacheKeys.kitchenProfile(review.kitchenId));
+
+    return updated;
+}
+

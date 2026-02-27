@@ -1,6 +1,15 @@
+// CHANGED: POST handler now performs sequential kitchen insert + role update
+// with compensation logic (delete kitchen if role update fails).
+// Role is returned in response so client can update local state.
+
 import { NextRequest } from "next/server";
 import { createKitchenSchema, kitchenQuerySchema } from "@/lib/validations/kitchen";
 import { createKitchen, listKitchens, getKitchensByOwner } from "@/services/kitchen.service";
+import { updateUserRole } from "@/services/auth.service";
+import { setUserRoleClaim } from "@/lib/auth/firebase-admin";
+import { db } from "@/lib/db";
+import { kitchens } from "@/lib/db/schema";
+import { eq } from "drizzle-orm";
 import {
     apiSuccess,
     apiCreated,
@@ -25,8 +34,8 @@ export async function GET(request: NextRequest) {
             const user = await getAuthUser(request);
             if (!user) return apiUnauthorized();
 
-            const kitchens = await getKitchensByOwner(user.id);
-            return apiSuccess(kitchens);
+            const userKitchens = await getKitchensByOwner(user.id);
+            return apiSuccess(userKitchens);
         }
 
         const parsed = kitchenQuerySchema.safeParse(params);
@@ -52,12 +61,19 @@ export async function GET(request: NextRequest) {
 /**
  * POST /api/kitchens
  * Auth required: Create a new kitchen (upgrades user to COOK role).
+ *
+ * Sequential flow (no transactions on Neon HTTP):
+ *   Step 1: Insert kitchen
+ *   Step 2: Update user role to COOK in DB + Firebase custom claims
+ *   Step 3: If Step 2 fails → delete the kitchen (compensation)
  */
 export async function POST(request: NextRequest) {
     try {
+        // ── Auth check ──
         const user = await getAuthUser(request);
         if (!user) return apiUnauthorized();
 
+        // ── Validate input ──
         const body = await request.json();
         const parsed = createKitchenSchema.safeParse(body);
 
@@ -66,8 +82,29 @@ export async function POST(request: NextRequest) {
             return apiBadRequest("Invalid kitchen data", errors);
         }
 
+        // ── Step 1: Insert kitchen (ownerId from auth, never from body) ──
         const kitchen = await createKitchen(user.id, parsed.data);
-        return apiCreated(kitchen);
+
+        // ── Step 2: Update user role to COOK ──
+        try {
+            await updateUserRole(user.id, "COOK");
+
+            // Also set Firebase custom claims so the client token reflects the new role
+            await setUserRoleClaim(user.firebaseUid, "COOK");
+        } catch (roleError) {
+            // ── Step 3: Compensation — delete the kitchen we just created ──
+            console.error("[Create Kitchen] Role update failed, compensating:", roleError);
+            try {
+                await db.delete(kitchens).where(eq(kitchens.id, kitchen.id));
+                console.log("[Create Kitchen] Compensation: deleted kitchen", kitchen.id);
+            } catch (deleteError) {
+                console.error("[Create Kitchen] Compensation delete ALSO failed:", deleteError);
+            }
+            return apiInternalError("Failed to complete kitchen registration. Please try again.");
+        }
+
+        // ── Success ──
+        return apiCreated({ kitchen, role: "COOK" as const });
     } catch (error: unknown) {
         const message = error instanceof Error ? error.message : "Unknown error";
         console.error("[Create Kitchen Error]", error);
